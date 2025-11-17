@@ -1,3 +1,0 @@
-[submodule "dependencies/a-star"]
-	path = dependencies/a-star
-	url = https://github.com/justinhj/astar-algorithm-cpp.git
