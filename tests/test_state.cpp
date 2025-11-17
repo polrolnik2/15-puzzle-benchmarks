@@ -7,7 +7,7 @@
 TEST(StateTest, ValidCreationAndPosition) {
     int empty_cells = 1;
     int n = 16 - empty_cells; // number of tiles present
-    int* tiles = new int[n];
+    std::vector<int> tiles(n);
     for (int i = 0; i < n; ++i) {
         tiles[i] = i; // place tile i at position i
     }

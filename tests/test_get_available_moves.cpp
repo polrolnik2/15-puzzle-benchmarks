@@ -15,9 +15,9 @@ static int* make_tiles_from_empty_positions(const std::vector<int>& empties) {
         if (std::find(empties.begin(), empties.end(), i) == empties.end()) pos.push_back(i);
     }
     // allocate array expected by State constructor
-    int* tiles = new int[n];
+    std::vector<int> tiles(n);
     for (int i = 0; i < n; ++i) tiles[i] = pos[i];
-    return tiles;
+    return tiles.data();
 }
 
 static std::set<int> collect_swapped_empty_positions(const State& s) {
