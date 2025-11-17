@@ -1,0 +1,15 @@
+Input data:
+- Initial state
+- Number of empty cells
+- Weight of each tile
+
+Output data:
+- Number of intermediate states before reaching the goal state
+- Sequence of intermediate states from the initial state to the goal state
+
+State format:
+- A list of $16-z$ unique integers represeting the location of each of the tiles in the grid, where $z$ is the number of empty cells. The integers range from 1 to 15, corresponding to the tile numbers. The empty cells are not represented in the list. 
+- Cells are indexed from 0 to 15 in row-major order.
+
+Goal state:
+- The goal state is a state where the tiles are arranged in descending order from $16-z$ to 1, with the empty cells at the end of the list.
