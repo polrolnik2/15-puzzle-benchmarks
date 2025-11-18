@@ -11,14 +11,10 @@ class PuzzleAStarState {
 public:
     PuzzleAStarState() = default;
     PuzzleAStarState(const State &s, const std::vector<int>& weights) {
-        empty_cells_ = s.get_empty_cells();
-        int n = 16 - empty_cells_;
-        tiles_.resize(n);
-        for (int i = 0; i < n; ++i) {
-            tiles_[i] = s.get_tile_row(i) * 4 + s.get_tile_column(i);
-        }
-        weights_ = weights;
+        puzzle_state_ = std::make_shared<State>(s);
+        weights_ = std::make_shared<std::vector<int>>(weights);
     }
+    ~PuzzleAStarState() = default;
 
     // AStarState interface
     float GoalDistanceEstimate(PuzzleAStarState &nodeGoal);
@@ -32,8 +28,8 @@ public:
     State to_state() const;
 
 private:
-    std::vector<int> weights_;
-    std::vector<int> tiles_;
+    std::shared_ptr<std::vector<int>> weights_;
+    std::shared_ptr<State> puzzle_state_;
     int empty_cells_ = 0;
 };
 

@@ -14,6 +14,7 @@ public:
     State(const std::vector<int>& tiles, int empty_cells);
     State(const std::vector<int>& tiles, int empty_cells, int side_length);
     ~State() = default;
+    size_t hash() const;
 
     // Rule of five
     State(const State& other);

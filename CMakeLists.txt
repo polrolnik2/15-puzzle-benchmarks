@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
 add_subdirectory(A-star-model)
+add_subdirectory(benchmarks)
 
 enable_testing()
 add_subdirectory(tests)

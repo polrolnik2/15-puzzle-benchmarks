@@ -142,3 +142,11 @@ bool State::operator==(const State &rhs) const {
     }
     return true;
 }
+
+size_t State::hash() const {
+    size_t hash = 0;
+    for (size_t i = 0; i < tiles.size(); i++) {
+        hash ^= std::hash<int>()(tiles[i]) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+    }
+    return hash;
+}
