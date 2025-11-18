@@ -10,13 +10,14 @@
 class PuzzleAStarState {
 public:
     PuzzleAStarState() = default;
-    PuzzleAStarState(const State &s) {
+    PuzzleAStarState(const State &s, const std::vector<int>& weights) {
         empty_cells_ = s.get_empty_cells();
         int n = 16 - empty_cells_;
         tiles_.resize(n);
         for (int i = 0; i < n; ++i) {
             tiles_[i] = s.get_tile_row(i) * 4 + s.get_tile_column(i);
         }
+        weights_ = weights;
     }
 
     // AStarState interface
@@ -31,7 +32,7 @@ public:
     State to_state() const;
 
 private:
-    std::vector<int> weights;
+    std::vector<int> weights_;
     std::vector<int> tiles_;
     int empty_cells_ = 0;
 };
@@ -42,7 +43,7 @@ public:
     PuzzleAStarSolver(int maxNodes = 10000);
 
     // Solve from start -> goal. Returns sequence of States from start to goal (inclusive).
-    std::vector<State> solve(const State &start, const State &goal);
+    std::vector<State> solve(const State &start, const State &goal, std::vector<int> weights);
 
 private:
     AStarSearch<PuzzleAStarState> search_;

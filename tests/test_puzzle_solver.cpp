@@ -6,6 +6,7 @@
 TEST(PuzzleSolver, OneMoveSolution) {
     int empty_cells = 1;
     int n = 16 - empty_cells;
+    std::vector<int> weights(n, 1); // uniform weights
     // start: tiles 0..14 at positions 0..14, empty at 15
     std::vector<int> start_tiles;
     for (int i = 0; i < n; ++i) start_tiles.push_back(i);
@@ -17,7 +18,7 @@ TEST(PuzzleSolver, OneMoveSolution) {
     State goal(goal_tiles, empty_cells);
 
     PuzzleAStarSolver solver(1000);
-    auto path = solver.solve(start, goal);
+    auto path = solver.solve(start, goal, weights);
 
     // Expect at least two states: start and goal
     EXPECT_GE(path.size(), 2u);

@@ -6,7 +6,7 @@
 
 // Heuristic: sum of Manhattan distances of matching tile indices
 float PuzzleAStarState::GoalDistanceEstimate(PuzzleAStarState &nodeGoal) {
-    return static_cast<float>(manhattan_distance(this->to_state(), nodeGoal.to_state(), this->weights));
+    return static_cast<float>(manhattan_distance(this->to_state(), nodeGoal.to_state(), this->weights_));
 }
 
 bool PuzzleAStarState::IsGoal(PuzzleAStarState &nodeGoal) {
@@ -16,14 +16,14 @@ bool PuzzleAStarState::IsGoal(PuzzleAStarState &nodeGoal) {
 bool PuzzleAStarState::GetSuccessors(AStarSearch<PuzzleAStarState> *astarsearch, PuzzleAStarState * parent_node) {
     auto moves = this->to_state().get_available_moves();
     for (auto &mv : moves) {
-        PuzzleAStarState tmp(mv);
+        PuzzleAStarState tmp(mv, this->weights_);
         if (!astarsearch->AddSuccessor(tmp)) return false;
     }
     return true;
 }
 
 float PuzzleAStarState::GetCost(PuzzleAStarState & successor) {
-    return static_cast<float>(manhattan_distance(this->to_state(), successor.to_state(), this->weights));
+    return static_cast<float>(manhattan_distance(this->to_state(), successor.to_state(), this->weights_));
 }
 
 bool PuzzleAStarState::IsSameState(PuzzleAStarState &rhs) {
@@ -51,9 +51,9 @@ PuzzleAStarSolver::PuzzleAStarSolver(int maxNodes)
 {
 }
 
-std::vector<State> PuzzleAStarSolver::solve(const State &start, const State &goal) {
-    PuzzleAStarState sstart(start);
-    PuzzleAStarState sgoal(goal);
+std::vector<State> PuzzleAStarSolver::solve(const State &start, const State &goal, std::vector<int> weights) {
+    PuzzleAStarState sstart(start, weights);
+    PuzzleAStarState sgoal(goal, weights);
 
     search_.SetStartAndGoalStates(sstart, sgoal);
 
@@ -69,6 +69,8 @@ std::vector<State> PuzzleAStarSolver::solve(const State &start, const State &goa
             path.push_back(p->to_state());
             p = search_.GetSolutionNext();
         }
+        p = search_.GetSolutionEnd();
+        path.push_back(p->to_state());
     }
 
     search_.FreeSolutionNodes();

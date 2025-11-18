@@ -88,8 +88,7 @@ int State::get_empty_cells() const {
 vector<int> State::get_empty_positions() const {
     vector<int> empty_positions;
     int num_cells = side_length * side_length;
-    empty_positions.reserve(empty_cells);
-    bool occupied[num_cells] = {false};
+    vector<bool> occupied(num_cells, false);
     for (int i = 0; i < num_cells - empty_cells; ++i) {
         if (!tiles.empty()) {
             int pos = tiles[i];

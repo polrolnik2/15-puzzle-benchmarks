@@ -16,6 +16,11 @@ RUN apt-get update && \
     apt-get install -y cmake g++ libgtest-dev && \
     apt-get clean
 
+#install Debuggers
+RUN apt-get update && \
+    apt-get install -y gdb lldb && \
+    apt-get clean
+
 # Set up workdir and copy project
 WORKDIR /workspace
 COPY . /workspace
