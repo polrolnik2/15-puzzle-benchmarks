@@ -7,23 +7,33 @@
 #include <cstddef>
 
 // Puzzle state type that implements the A* user-state interface
-class PuzzleAStarState : public AStarState<PuzzleAStarState> {
+class PuzzleAStarState {
 public:
     PuzzleAStarState() = default;
-    PuzzleAStarState(const State &s) : s_(s) {}
+    PuzzleAStarState(const State &s) {
+        empty_cells_ = s.get_empty_cells();
+        int n = 16 - empty_cells_;
+        tiles_.resize(n);
+        for (int i = 0; i < n; ++i) {
+            tiles_[i] = s.get_tile_row(i) * 4 + s.get_tile_column(i);
+        }
+    }
 
     // AStarState interface
-    float GoalDistanceEstimate(PuzzleAStarState &nodeGoal) override;
-    bool IsGoal(PuzzleAStarState &nodeGoal) override;
-    bool GetSuccessors(AStarSearch<PuzzleAStarState> *astarsearch, PuzzleAStarState *parent_node) override;
-    float GetCost(PuzzleAStarState &successor) override;
-    bool IsSameState(PuzzleAStarState &rhs) override;
-    size_t Hash() override;
+    float GoalDistanceEstimate(PuzzleAStarState &nodeGoal);
+    bool IsGoal(PuzzleAStarState &nodeGoal);
+    bool GetSuccessors(AStarSearch<PuzzleAStarState> *astarsearch, PuzzleAStarState *parent_node);
+    float GetCost(PuzzleAStarState &successor);
+    bool IsSameState(PuzzleAStarState &rhs);
+    size_t Hash();
 
-    const State& state() const { return s_; }
+    // Convert to a runtime-owned State object (caller takes ownership via State semantics)
+    State to_state() const;
 
 private:
-    State s_ { nullptr, 0 };
+    std::vector<int> weights;
+    std::vector<int> tiles_;
+    int empty_cells_ = 0;
 };
 
 // Simple solver wrapper that uses the A* engine on PuzzleAStarState

@@ -2,31 +2,19 @@
 #include <algorithm>
 #include <functional>
 #include <numeric>
+#include "distance.hpp"
 
 // Heuristic: sum of Manhattan distances of matching tile indices
 float PuzzleAStarState::GoalDistanceEstimate(PuzzleAStarState &nodeGoal) {
-    const State &a = this->s_;
-    const State &b = nodeGoal.s_;
-    int na = 16 - a.get_empty_cells();
-    int nb = 16 - b.get_empty_cells();
-    int n = std::min(na, nb);
-    float total = 0.0f;
-    for (int tile = 0; tile < n; ++tile) {
-        int ar = a.get_tile_row(tile);
-        int ac = a.get_tile_column(tile);
-        int br = b.get_tile_row(tile);
-        int bc = b.get_tile_column(tile);
-        total += static_cast<float>(std::abs(ar - br) + std::abs(ac - bc));
-    }
-    return total;
+    return static_cast<float>(manhattan_distance(this->to_state(), nodeGoal.to_state(), this->weights));
 }
 
 bool PuzzleAStarState::IsGoal(PuzzleAStarState &nodeGoal) {
     return IsSameState(nodeGoal);
 }
 
-bool PuzzleAStarState::GetSuccessors(AStarSearch<PuzzleAStarState> *astarsearch, PuzzleAStarState * /*parent_node*/) {
-    auto moves = s_.get_available_moves();
+bool PuzzleAStarState::GetSuccessors(AStarSearch<PuzzleAStarState> *astarsearch, PuzzleAStarState * parent_node) {
+    auto moves = this->to_state().get_available_moves();
     for (auto &mv : moves) {
         PuzzleAStarState tmp(mv);
         if (!astarsearch->AddSuccessor(tmp)) return false;
@@ -34,33 +22,28 @@ bool PuzzleAStarState::GetSuccessors(AStarSearch<PuzzleAStarState> *astarsearch,
     return true;
 }
 
-float PuzzleAStarState::GetCost(PuzzleAStarState &/*successor*/) {
-    return 1.0f; // each slide costs 1
+float PuzzleAStarState::GetCost(PuzzleAStarState & successor) {
+    return static_cast<float>(manhattan_distance(this->to_state(), successor.to_state(), this->weights));
 }
 
 bool PuzzleAStarState::IsSameState(PuzzleAStarState &rhs) {
-    const State &a = this->s_;
-    const State &b = rhs.s_;
-    int na = 16 - a.get_empty_cells();
-    int nb = 16 - b.get_empty_cells();
-    if (na != nb) return false;
-    for (int tile = 0; tile < na; ++tile) {
-        if (a.get_tile_row(tile) != b.get_tile_row(tile) || a.get_tile_column(tile) != b.get_tile_column(tile)) return false;
-    }
-    return true;
+    return this->empty_cells_ == rhs.empty_cells_ && this->tiles_ == rhs.tiles_;
 }
 
 size_t PuzzleAStarState::Hash() {
-    const State &a = this->s_;
-    int n = 16 - a.get_empty_cells();
-    // Simple rolling hash over tile positions
+    // Simple rolling hash over internal tile positions
     size_t h = 1469598103934665603ULL; // FNV offset
-    for (int tile = 0; tile < n; ++tile) {
-        int pos = a.get_tile_row(tile) * 4 + a.get_tile_column(tile);
-        h ^= static_cast<size_t>(pos + 1);
+    h ^= static_cast<size_t>(this->empty_cells_ + 1);
+    h *= 1099511628211ULL;
+    for (int v : tiles_) {
+        h ^= static_cast<size_t>(v + 1);
         h *= 1099511628211ULL; // FNV prime
     }
     return h;
+}
+
+State PuzzleAStarState::to_state() const {
+    return State(this->tiles_, this->empty_cells_);
 }
 
 PuzzleAStarSolver::PuzzleAStarSolver(int maxNodes)
@@ -83,7 +66,7 @@ std::vector<State> PuzzleAStarSolver::solve(const State &start, const State &goa
     if (result == AStarSearch<PuzzleAStarState>::SEARCH_STATE_SUCCEEDED) {
         PuzzleAStarState *p = search_.GetSolutionStart();
         while (p) {
-            path.push_back(p->state());
+            path.push_back(p->to_state());
             p = search_.GetSolutionNext();
         }
     }

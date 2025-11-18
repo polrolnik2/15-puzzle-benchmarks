@@ -19,3 +19,8 @@ add_executable(test_available_moves test_get_available_moves.cpp)
 target_link_libraries(test_available_moves PRIVATE astarmodel gtest_main)
 target_include_directories(test_available_moves PRIVATE ${CMAKE_SOURCE_DIR}/A-star-model)
 add_test(NAME available_moves_tests COMMAND test_available_moves)
+
+add_executable(test_puzzle_solver test_puzzle_solver.cpp)
+target_link_libraries(test_puzzle_solver PRIVATE astarmodel gtest_main)
+target_include_directories(test_puzzle_solver PRIVATE ${CMAKE_SOURCE_DIR}/A-star-model)
+add_test(NAME puzzle_solver_tests COMMAND test_puzzle_solver)

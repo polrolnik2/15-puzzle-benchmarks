@@ -26,33 +26,27 @@ TEST(StateTest, ValidCreationAndPosition) {
     EXPECT_EQ(s.get_tile_column(n-1), (n-1) % 4);
 }
 
-TEST(StateTest, NullTilesThrows) {
-    EXPECT_THROW(State(nullptr, 1), std::invalid_argument);
-}
-
 TEST(StateTest, DuplicateTilesThrows) {
     int empty_cells = 1;
     int n = 16 - empty_cells;
-    int* tiles = new int[n];
+    std::vector<int> tiles(n);
     for (int i = 0; i < n; ++i) tiles[i] = i;
     // create a duplicate position: tiles[3] == tiles[2]
     tiles[3] = tiles[2];
 
     EXPECT_THROW(State(tiles, empty_cells), std::invalid_argument);
-    delete[] tiles; // constructor threw, we still own memory
 }
 
 TEST(StateTest, OutOfRangeTileValueThrows) {
     int empty_cells = 1;
     int n = 16 - empty_cells;
-    int* tiles = new int[n];
+    std::vector<int> tiles(n);
     for (int i = 0; i < n; ++i) tiles[i] = i;
     // set an out-of-range position
     tiles[4] = 100;
 
     EXPECT_THROW(State(tiles, empty_cells), std::invalid_argument);
-    delete[] tiles;
-}
+    }
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);

@@ -3,7 +3,9 @@
 #include "state.hpp"
 #include "distance.hpp"
 
-int manhattan_distance(const State& state, int*weights, const State& goal_state) {
+using namespace std;
+
+int manhattan_distance(const State& state, const State& goal_state, vector<int>weights) {
     int distance = 0;
     for (int tile = 0; tile < 16 - state.get_empty_cells(); ++tile) {
         int current_row = state.get_tile_row(tile);

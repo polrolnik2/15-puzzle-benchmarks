@@ -6,7 +6,7 @@
 
 #include "../A-star-model/state.hpp"
 
-static int* make_tiles_from_empty_positions(const std::vector<int>& empties) {
+static std::vector<int> make_tiles_from_empty_positions(const std::vector<int>& empties) {
     int empty_cells = static_cast<int>(empties.size());
     int n = 16 - empty_cells;
     std::vector<int> pos;
@@ -17,7 +17,7 @@ static int* make_tiles_from_empty_positions(const std::vector<int>& empties) {
     // allocate array expected by State constructor
     std::vector<int> tiles(n);
     for (int i = 0; i < n; ++i) tiles[i] = pos[i];
-    return tiles.data();
+    return tiles;
 }
 
 static std::set<int> collect_swapped_empty_positions(const State& s) {
@@ -36,7 +36,7 @@ static std::set<int> collect_swapped_empty_positions(const State& s) {
 
 TEST(AvailableMoves, SingleEmptyCorner) {
     std::vector<int> empties = {15};
-    int* tiles = make_tiles_from_empty_positions(empties);
+    std::vector<int> tiles = make_tiles_from_empty_positions(empties);
     State s(tiles, static_cast<int>(empties.size()));
 
     auto found = collect_swapped_empty_positions(s);
@@ -46,7 +46,7 @@ TEST(AvailableMoves, SingleEmptyCorner) {
 
 TEST(AvailableMoves, SingleEmptyEdge) {
     std::vector<int> empties = {4};
-    int* tiles = make_tiles_from_empty_positions(empties);
+    std::vector<int> tiles = make_tiles_from_empty_positions(empties);
     State s(tiles, static_cast<int>(empties.size()));
 
     // neighbors: up(0), down(8), left(3), right(5)
@@ -57,7 +57,7 @@ TEST(AvailableMoves, SingleEmptyEdge) {
 
 TEST(AvailableMoves, SingleEmptyMiddle) {
     std::vector<int> empties = {5};
-    int* tiles = make_tiles_from_empty_positions(empties);
+    std::vector<int> tiles = make_tiles_from_empty_positions(empties);
     State s(tiles, static_cast<int>(empties.size()));
 
     // neighbors: up(1), down(9), left(4), right(6)
@@ -68,7 +68,7 @@ TEST(AvailableMoves, SingleEmptyMiddle) {
 
 TEST(AvailableMoves, TwoEmptyCells) {
     std::vector<int> empties = {14, 15};
-    int* tiles = make_tiles_from_empty_positions(empties);
+    std::vector<int> tiles = make_tiles_from_empty_positions(empties);
     State s(tiles, static_cast<int>(empties.size()));
 
     // For empties 14 and 15, valid moves are tiles adjacent to these that are not empty:
