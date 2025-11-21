@@ -6,7 +6,7 @@
 
 // Heuristic: sum of Manhattan distances of matching tile indices
 float PuzzleAStarState::GoalDistanceEstimate(PuzzleAStarState &nodeGoal) {
-    return static_cast<float>(manhattan_distance(this->to_state(), nodeGoal.to_state(), *this->weights_));
+    return static_cast<float>(manhattan_distance(this->to_state(), nodeGoal.to_state(), this->weights_));
 }
 
 bool PuzzleAStarState::IsGoal(PuzzleAStarState &nodeGoal) {
@@ -16,14 +16,14 @@ bool PuzzleAStarState::IsGoal(PuzzleAStarState &nodeGoal) {
 bool PuzzleAStarState::GetSuccessors(AStarSearch<PuzzleAStarState> *astarsearch, PuzzleAStarState * parent_node) {
     auto moves = this->to_state().get_available_moves();
     for (auto &mv : moves) {
-        PuzzleAStarState tmp(mv, *this->weights_);
+        PuzzleAStarState tmp(mv, this->weights_);
         if (!astarsearch->AddSuccessor(tmp)) return false;
     }
     return true;
 }
 
 float PuzzleAStarState::GetCost(PuzzleAStarState & successor) {
-    return static_cast<float>(manhattan_distance(this->to_state(), successor.to_state(), *this->weights_));
+    return static_cast<float>(manhattan_distance(this->to_state(), successor.to_state(), this->weights_));
 }
 
 bool PuzzleAStarState::IsSameState(PuzzleAStarState &rhs) {
@@ -33,14 +33,14 @@ bool PuzzleAStarState::IsSameState(PuzzleAStarState &rhs) {
 size_t PuzzleAStarState::Hash() {
     // Simple rolling hash over internal tile positions
     size_t h = 1469598103934665603ULL; // FNV offset
-    h ^= static_cast<size_t>(this->puzzle_state_->get_empty_cells() + 1);
+    h ^= static_cast<size_t>(this->puzzle_state_.get_empty_cells() + 1);
     h *= 1099511628211ULL;
-    h ^= this->puzzle_state_->hash();
+    h ^= this->puzzle_state_.hash();
     return h;
 }
 
 State PuzzleAStarState::to_state() const {
-    return *puzzle_state_;
+    return puzzle_state_;
 }
 
 PuzzleAStarSolver::PuzzleAStarSolver(int maxNodes)

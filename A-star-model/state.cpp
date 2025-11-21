@@ -8,7 +8,7 @@
 using namespace std;
 
 void State::init(const vector<int>& tiles, int empty_cells, int side_length) {
-    if (tiles.empty()) {
+    if (tiles.size() != static_cast<size_t>(side_length * side_length - empty_cells)) {
         throw invalid_argument("Tiles array cannot be empty");
     }
     int num_cells = side_length * side_length;
@@ -32,45 +32,19 @@ void State::init(const vector<int>& tiles, int empty_cells, int side_length) {
 }
 
 State::State(const vector<int>& tiles, int empty_cells, int side_length) {
-    init(tiles, empty_cells, side_length);
+    try {
+        init(tiles, empty_cells, side_length);
+    } catch (const std::exception& e) {
+        throw;
+    }
 }
 
 State::State(const vector<int>& tiles, int empty_cells) {
-    init(tiles, empty_cells, 4);
-}
-
-// Copy constructor (deep copy)
-State::State(const State& other) {
-    int num_cells = other.side_length * other.side_length;
-    empty_cells = other.empty_cells;
-    int n = num_cells - empty_cells;
-    tiles = other.tiles;
-    side_length = other.side_length;
-}
-
-State::State(State&& other) noexcept {
-    tiles = std::move(other.tiles);
-    empty_cells = other.empty_cells;
-    side_length = other.side_length;
-    other.empty_cells = 0;
-}
-
-State& State::operator=(const State& other) {
-    if (this == &other) return *this;
-    empty_cells = other.empty_cells;
-    int n = other.side_length * other.side_length - empty_cells;
-    tiles = other.tiles;
-    side_length = other.side_length;
-    return *this;
-}
-
-State& State::operator=(State&& other) noexcept {
-    if (this == &other) return *this;
-    tiles = std::move(other.tiles);
-    empty_cells = other.empty_cells;
-    side_length = other.side_length;
-    other.empty_cells = 0;
-    return *this;
+    try {
+        init(tiles, empty_cells, 4);
+    } catch (const std::exception& e) {
+        throw;
+    }
 }
 
 int State::get_tile_row(int tile) const {
@@ -112,8 +86,7 @@ vector<State> State::get_available_moves() const {
             int neighbor_pos = empty_pos + dir;
             if (neighbor_pos >= 0 && neighbor_pos < num_cells) {
                 // Create new tiles array for the new state
-                std::vector<int> new_tiles = tiles;
-                copy(tiles.begin(), tiles.end(), new_tiles.begin());
+                std::vector<int> new_tiles = std::move(tiles);
                 // Find the tile that is at neighbor_pos and swap it with empty_pos
                 bool swapped = false;
                 for (int i = 0; i < num_cells - empty_cells; ++i) {
@@ -124,7 +97,7 @@ vector<State> State::get_available_moves() const {
                     }
                 }
                 if (swapped) {
-                    State new_state(new_tiles, empty_cells);
+                    State new_state(new_tiles, empty_cells, side_length);
                     moves.push_back(new_state);
                 }
             }

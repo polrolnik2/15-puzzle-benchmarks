@@ -10,16 +10,21 @@
 
 using namespace std;
 
-static vector<int> make_random_tiles(int side_size, int empty_cells, std::mt19937 &rng) {
+static State random_state(int side_size, int empty_cells, std::mt19937 &rng) {
     if (side_size != 4) throw runtime_error("Only side_size==4 is supported by this benchmark");
     int total = side_size * side_size;
     int ntiles = total - empty_cells;
-    vector<int> positions(total);
-    iota(positions.begin(), positions.end(), 0);
-    shuffle(positions.begin(), positions.end(), rng);
-    vector<int> tiles(ntiles);
-    for (int i = 0; i < ntiles; ++i) tiles[i] = positions[i];
-    return tiles;
+    vector<int> positions(ntiles);
+    for (int i = 0; i < ntiles; ++i) positions[i] = i;
+    State start_state(positions, empty_cells);
+    std::uniform_int_distribution<int> dist(0, 50);
+    int random_value = dist(rng);
+    State temp_state = start_state;
+    for (int i = 0; i < random_value; ++i) {
+        auto moves = temp_state.get_available_moves();
+        temp_state = moves[rng() % moves.size()];
+    }
+    return temp_state;
 }
 
 int main(int argc, char** argv) {
@@ -51,17 +56,27 @@ int main(int argc, char** argv) {
     int ntiles = total - empty_cells;
     vector<int> goal_tiles(ntiles);
     for (int i = 0; i < ntiles; ++i) goal_tiles[i] = i;
-    State goal_state(goal_tiles, empty_cells);
+    State goal_state;
+    try {
+        goal_state = State(goal_tiles, empty_cells);
+    } catch (const std::exception& e) {
+        cerr << "Error creating goal state: " << e.what() << '\n';
+        return 2;
+    }
 
     PuzzleAStarSolver solver(20000);
 
     // CSV header
     cout << "side_size,empty_cells,instance_id,seed,time_ms,found,path_length" << '\n';
 
-    vector<int> tiles = make_random_tiles(side_size, empty_cells, rng);
-    State start_state(tiles, empty_cells);
+    State start_state;
+    try {
+        start_state = random_state(side_size, empty_cells, rng);
+    } catch (const std::exception& e) {
+        cerr << "Error generating random state: " << e.what() << '\n';
+        return 4;
+    }
 
-    auto t0 = chrono::steady_clock::now();
     int nweights = ntiles;
     vector<int> weights(nweights);
     uniform_int_distribution<int> wdist(1, 10);
@@ -75,6 +90,7 @@ int main(int argc, char** argv) {
     }
     cout << '\n';
 
+    auto t0 = chrono::steady_clock::now();
     vector<State> path = solver.solve(start_state, goal_state, std::move(weights));
     auto t1 = chrono::steady_clock::now();
     double ms = chrono::duration_cast<chrono::duration<double, milli>>(t1 - t0).count();

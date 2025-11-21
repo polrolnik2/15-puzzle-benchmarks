@@ -5,14 +5,15 @@
 #include "../dependencies/a-star/cpp/stlastar.h"
 #include <vector>
 #include <cstddef>
+#include <memory>
 
 // Puzzle state type that implements the A* user-state interface
 class PuzzleAStarState {
 public:
     PuzzleAStarState() = default;
     PuzzleAStarState(const State &s, const std::vector<int>& weights) {
-        puzzle_state_ = std::make_shared<State>(s);
-        weights_ = std::make_shared<std::vector<int>>(weights);
+        puzzle_state_ = s;
+        weights_ = weights;
     }
     ~PuzzleAStarState() = default;
 
@@ -28,9 +29,8 @@ public:
     State to_state() const;
 
 private:
-    std::shared_ptr<std::vector<int>> weights_;
-    std::shared_ptr<State> puzzle_state_;
-    int empty_cells_ = 0;
+    std::vector<int> weights_;
+    State puzzle_state_;
 };
 
 // Simple solver wrapper that uses the A* engine on PuzzleAStarState
