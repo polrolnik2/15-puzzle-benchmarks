@@ -7,6 +7,7 @@
 
 #include "state.hpp"
 #include "15-puzzle-a-star-solver.hpp"
+#include "15-puzzle-bfs-solver.hpp"
 
 using namespace std;
 
@@ -89,7 +90,8 @@ int main(int argc, char** argv) {
     cout << '\n';
 
     auto t0 = chrono::steady_clock::now();
-    vector<State> path = PuzzleSolveAstar(start_state, goal_state, std::move(weights));
+    // vector<State> path = PuzzleSolveAstar(start_state, goal_state, weights);
+    vector<State> path = BFSPuzzleSolver(start_state, goal_state);
     auto t1 = chrono::steady_clock::now();
     double ms = chrono::duration_cast<chrono::duration<double, milli>>(t1 - t0).count();
 

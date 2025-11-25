@@ -116,6 +116,12 @@ bool State::operator==(const State &rhs) const {
     return true;
 }
 
+bool State::operator<(const State &rhs) const {
+    if (side_length != rhs.side_length) return side_length < rhs.side_length;
+    if (empty_cells != rhs.empty_cells) return empty_cells < rhs.empty_cells;
+    return tiles < rhs.tiles; // vector provides lexicographical comparison
+}
+
 size_t State::hash() const {
     size_t hash = 0;
     for (size_t i = 0; i < tiles.size(); i++) {

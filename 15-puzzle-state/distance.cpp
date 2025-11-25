@@ -1,5 +1,7 @@
 #include <cstdlib>
 
+#include <vector>
+
 #include "state.hpp"
 #include "distance.hpp"
 

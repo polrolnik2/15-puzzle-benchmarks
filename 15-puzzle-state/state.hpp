@@ -1,8 +1,6 @@
 #ifndef __STATE_HPP___
 #define __STATE_HPP___
 
-#include <vector>
-
 using namespace std;
 
 class State {
@@ -32,6 +30,7 @@ public:
     vector<int> get_empty_positions() const;
     vector<State> get_available_moves() const;
     bool operator==(const State &rhs) const;
+    bool operator<(const State &rhs) const;
 };
 
 #endif // __STATE_HPP___

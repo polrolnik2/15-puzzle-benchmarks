@@ -1,9 +1,11 @@
-#include "15-puzzle-a-star-solver.hpp"
-#include "../dependencies/a-star/cpp/stlastar.h"
 #include <algorithm>
 #include <functional>
 #include <numeric>
+#include <vector>
+#include "state.hpp"
 #include "distance.hpp"
+#include "15-puzzle-a-star-solver.hpp"
+#include "../dependencies/a-star/cpp/stlastar.h"
 
 // Puzzle state type that implements the A* user-state interface
 class PuzzleAStarState {
@@ -70,7 +72,7 @@ State PuzzleAStarState::to_state() const {
     return puzzle_state_;
 }
 
-std::vector<State> PuzzleSolveAstar(const State &start, const State &goal, std::vector<int> weights) {
+std::vector<State> PuzzleSolveAstar(const State &start, const State &goal, std::vector<int> weights, int* visited_nodes) {
     PuzzleAStarState sstart(start, weights);
     PuzzleAStarState sgoal(goal, weights);
 
@@ -91,6 +93,10 @@ std::vector<State> PuzzleSolveAstar(const State &start, const State &goal, std::
         }
         p = search_.GetSolutionEnd();
         path.push_back(p->to_state());
+    }
+
+    if (visited_nodes) {
+        *visited_nodes = search_.GetStepCount();
     }
 
     search_.FreeSolutionNodes();
