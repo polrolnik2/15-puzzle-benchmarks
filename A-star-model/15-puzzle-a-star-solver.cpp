@@ -1,8 +1,35 @@
 #include "15-puzzle-a-star-solver.hpp"
+#include "../dependencies/a-star/cpp/stlastar.h"
 #include <algorithm>
 #include <functional>
 #include <numeric>
 #include "distance.hpp"
+
+// Puzzle state type that implements the A* user-state interface
+class PuzzleAStarState {
+public:
+    PuzzleAStarState() = default;
+    PuzzleAStarState(const State &s, const std::vector<int>& weights) {
+        puzzle_state_ = s;
+        weights_ = weights;
+    }
+    ~PuzzleAStarState() = default;
+
+    // AStarState interface
+    float GoalDistanceEstimate(PuzzleAStarState &nodeGoal);
+    bool IsGoal(PuzzleAStarState &nodeGoal);
+    bool GetSuccessors(AStarSearch<PuzzleAStarState> *astarsearch, PuzzleAStarState *parent_node);
+    float GetCost(PuzzleAStarState &successor);
+    bool IsSameState(PuzzleAStarState &rhs);
+    size_t Hash();
+
+    // Convert to a runtime-owned State object (caller takes ownership via State semantics)
+    State to_state() const;
+
+private:
+    std::vector<int> weights_;
+    State puzzle_state_;
+};
 
 // Heuristic: sum of Manhattan distances of matching tile indices
 float PuzzleAStarState::GoalDistanceEstimate(PuzzleAStarState &nodeGoal) {
@@ -43,15 +70,11 @@ State PuzzleAStarState::to_state() const {
     return puzzle_state_;
 }
 
-PuzzleAStarSolver::PuzzleAStarSolver(int maxNodes)
-    : search_(maxNodes)
-{
-}
-
-std::vector<State> PuzzleAStarSolver::solve(const State &start, const State &goal, std::vector<int> weights) {
+std::vector<State> PuzzleSolveAstar(const State &start, const State &goal, std::vector<int> weights) {
     PuzzleAStarState sstart(start, weights);
     PuzzleAStarState sgoal(goal, weights);
 
+    AStarSearch<PuzzleAStarState> search_;
     search_.SetStartAndGoalStates(sstart, sgoal);
 
     unsigned int result = 0;

@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(USE_FSA_MEMORY "Enable fixed-size allocator in A* vendor (stlastar)" ON)
 
 
+add_subdirectory(15-puzzle-state)
 add_subdirectory(A-star-model)
 add_subdirectory(benchmarks)
 

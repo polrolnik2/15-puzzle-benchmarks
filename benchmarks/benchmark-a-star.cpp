@@ -5,8 +5,8 @@
 #include <algorithm>
 #include <string>
 
-#include "../A-star-model/state.hpp"
-#include "../A-star-model/15-puzzle-a-star-solver.hpp"
+#include "state.hpp"
+#include "15-puzzle-a-star-solver.hpp"
 
 using namespace std;
 
@@ -64,8 +64,6 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    PuzzleAStarSolver solver(20000);
-
     // CSV header
     cout << "side_size,empty_cells,instance_id,seed,time_ms,found,path_length" << '\n';
 
@@ -91,7 +89,7 @@ int main(int argc, char** argv) {
     cout << '\n';
 
     auto t0 = chrono::steady_clock::now();
-    vector<State> path = solver.solve(start_state, goal_state, std::move(weights));
+    vector<State> path = PuzzleSolveAstar(start_state, goal_state, std::move(weights));
     auto t1 = chrono::steady_clock::now();
     double ms = chrono::duration_cast<chrono::duration<double, milli>>(t1 - t0).count();
 

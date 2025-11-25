@@ -5,6 +5,9 @@ add_executable(benchmark-a-star
 )
 
 target_link_libraries(benchmark-a-star PRIVATE astarmodel)
+
+target_link_libraries(benchmark-a-star PUBLIC 15-puzzle-state)
+
 # headers from A-star-model are needed
 target_include_directories(benchmark-a-star PRIVATE ${CMAKE_SOURCE_DIR}/A-star-model)
 
