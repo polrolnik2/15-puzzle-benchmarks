@@ -2,7 +2,7 @@
 #include <gtest/gtest.h>
 #include <stdexcept>
 
-#include "../A-star-model/state.hpp"
+#include "state.hpp"
 
 TEST(StateTest, ValidCreationAndPosition) {
     int empty_cells = 1;

@@ -1,7 +1,7 @@
 // Google Test for PuzzleAStarSolver
 #include <gtest/gtest.h>
-
-#include "../A-star-model/15-puzzle-a-star-solver.hpp"
+#include "state.hpp"
+#include "15-puzzle-a-star-solver.hpp"
 
 TEST(PuzzleSolver, OneMoveSolution) {
     int empty_cells = 1;
@@ -17,8 +17,7 @@ TEST(PuzzleSolver, OneMoveSolution) {
     for (int i = 0; i < n; ++i) goal_tiles.push_back(i);
     State goal(goal_tiles, empty_cells);
 
-    PuzzleAStarSolver solver(1000);
-    auto path = solver.solve(start, goal, weights);
+    auto path = PuzzleSolveAstar(start, goal, weights);
 
     // Expect at least two states: start and goal
     EXPECT_GE(path.size(), 2u);

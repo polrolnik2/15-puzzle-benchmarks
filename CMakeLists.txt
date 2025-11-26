@@ -11,7 +11,7 @@ option(USE_FSA_MEMORY "Enable fixed-size allocator in A* vendor (stlastar)" ON)
 add_subdirectory(15-puzzle-state)
 add_subdirectory(A-star-model)
 add_subdirectory(BFS-solver)
-add_subdirectory(benchmarks)
+add_subdirectory(data-generation)
 
 enable_testing()
 add_subdirectory(tests)

@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <set>
 
-#include "../A-star-model/state.hpp"
+#include "state.hpp"
 
 static std::vector<int> make_tiles_from_empty_positions(const std::vector<int>& empties) {
     int empty_cells = static_cast<int>(empties.size());
