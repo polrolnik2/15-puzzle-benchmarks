@@ -1,16 +1,18 @@
-add_library(wastarmodel
+add_library(weightedastarmodel
     15-puzzle-weighted-a-star-solver.cpp
 )
 
-target_include_directories(wastarmodel PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/dependencies/a-star/cpp)
+target_include_directories(weightedastarmodel PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # Link against the standalone state library
-target_link_libraries(wastarmodel PUBLIC 15-puzzle-state)
+target_link_libraries(weightedastarmodel PUBLIC 15-puzzle-state)
 
-target_compile_features(wastarmodel PUBLIC cxx_std_20)
-# Propagate the USE_FSA_MEMORY option to the vendor code so it can be toggled
-if (DEFINED USE_FSA_MEMORY)
-    target_compile_definitions(wastarmodel PUBLIC USE_FSA_MEMORY=${USE_FSA_MEMORY})
-else()
-    # default to ON if the option isn't set
-    target_compile_definitions(wastarmodel PUBLIC USE_FSA_MEMORY=0)
-endif()
+target_compile_features(weightedastarmodel PUBLIC cxx_std_20)
+
+# Model benchmark executable
+add_executable(benchmark_weightedastar
+    benchmark.cpp
+)
+
+target_link_libraries(benchmark_weightedastar PRIVATE weightedastarmodel 15-puzzle-state)
+target_compile_features(benchmark_weightedastar PRIVATE cxx_std_20)
+install(TARGETS benchmark_weightedastar RUNTIME DESTINATION bin)

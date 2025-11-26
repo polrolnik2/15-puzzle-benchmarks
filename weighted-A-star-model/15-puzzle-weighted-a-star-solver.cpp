@@ -74,7 +74,7 @@ State PuzzleAStarState::to_state() const {
     return puzzle_state_;
 }
 
-std::vector<State> PuzzleSolveAstar(const State &start, const State &goal, std::vector<int> weights, float heuristic_weight, int* visited_nodes) {
+std::vector<State> PuzzleSolveWeightedAstar(const State &start, const State &goal, std::vector<int> weights, float heuristic_weight, int* visited_nodes) {
     ASTAR_HEURISTIC_WEIGHT = heuristic_weight;
     PuzzleAStarState sstart(start, weights);
     PuzzleAStarState sgoal(goal, weights);
