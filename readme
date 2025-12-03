@@ -1,15 +1,80 @@
-Input data:
-- Initial state
-- Number of empty cells
-- Weight of each tile
 
-Output data:
-- Number of intermediate states before reaching the goal state
-- Sequence of intermediate states from the initial state to the goal state
+-----------------------------
+Build & Run (CMake targets)
+-----------------------------
 
-State format:
-- A list of $16-z$ unique integers represeting the location of each of the tiles in the grid, where $z$ is the number of empty cells. The integers range from 1 to 15, corresponding to the tile numbers. The empty cells are not represented in the list. 
-- Cells are indexed from 0 to 15 in row-major order.
+Prerequisites:
+- CMake >= 3.14
+- A C++20-capable compiler (clang++ or gcc)
+- `doxygen` (optional, for `doc` target)
+- `graphviz` (optional, for diagrams in docs)
 
-Goal state:
-- The goal state is a state where the tiles are arranged in descending order from $16-z$ to 1, with the empty cells at the end of the list.
+Typical build and run steps (macOS / zsh):
+
+```bash
+# create an out-of-source build directory and configure
+mkdir -p build
+cd build
+cmake -S .. -B . -DUSE_FSA_MEMORY=OFF -DASTAR_HEURISTIC_WEIGHT=1.0
+
+# build everything (use all CPU cores)
+cmake --build . -- -j$(sysctl -n hw.ncpu)
+```
+
+Notes on CMake options:
+- `USE_FSA_MEMORY` (ON/OFF) toggles the vendor fixed-size allocator (useful for debugging memory issues).
+- `ASTAR_HEURISTIC_WEIGHT` (float) sets the heuristic weight for weighted A* runs.
+
+Common CMake targets
+- `all` (default): builds libraries and executables
+- `test_state`, `test_available_moves`, `test_puzzle_solver`: unit test executables (run via `ctest`)
+- `benchmark_astar`: A* benchmark executable
+- `benchmark_bfs`: BFS benchmark executable
+- `benchmark_weightedastar`: Weighted A* benchmark executable
+- `generate_sample_bfs`: data-generation (BFS sampling)
+- `generate_sample_random_walk`: data-generation (random-walk sampling)
+- `doc` (if Doxygen is available): build API documentation (HTML) using the repository `Doxyfile`
+
+Build individual targets:
+
+```bash
+# build a single target (from inside build/)
+cmake --build . --target benchmark_astar
+cmake --build . --target generate_sample_bfs
+cmake --build . --target doc
+```
+
+Running tests:
+
+```bash
+# run all CTest tests
+ctest --output-on-failure
+
+# or run a single test binary if you prefer
+./test_state
+```
+
+Generating API docs (optional):
+
+```bash
+# requires doxygen installed; graphviz recommended for diagrams
+cmake --build . --target doc
+# generated HTML will be in docs/html (relative to the repository root)
+```
+
+Example: run an A* benchmark using an input state file:
+
+```bash
+# from build/ after building benchmark_astar
+./benchmark_astar --input-file ../path/to/state.txt --side 4 --empty 1 --weights 1,1,1,1
+```
+
+Example: create a sampled state using BFS sampling
+
+```bash
+./generate_sample_bfs --side 4 --empty 1 --depth 20 --seed 42 --output-file ../samples/sample1.txt
+```
+
+If binaries do not appear in the build root, they will be placed under the corresponding subdirectory (e.g. `build/A-star-model/benchmark_astar`). Use `find build -type f -name <binary>` to locate them.
+
+If you want, I can add a short `docs/README.md` that explains the doc generation process and where to find diagrams.
