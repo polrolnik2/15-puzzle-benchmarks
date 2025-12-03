@@ -15,3 +15,16 @@ add_subdirectory(data-generation)
 
 enable_testing()
 add_subdirectory(tests)
+
+# Doxygen documentation target (optional)
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+	add_custom_target(doc
+		COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_SOURCE_DIR}/Doxyfile
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+		COMMENT "Generating API documentation with Doxygen"
+		VERBATIM
+	)
+else()
+	message(STATUS "Doxygen not found - 'doc' target will not be available.")
+endif()

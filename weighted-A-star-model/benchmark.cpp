@@ -13,6 +13,14 @@
 
 using namespace std;
 
+/**
+ * @file benchmark.cpp
+ * @brief Benchmark runner for the weighted A* puzzle solver.
+ *
+ * This program loads a start state and runs `PuzzleSolveWeightedAstar` with
+ * the requested heuristic weight, timing the run and printing a short summary.
+ */
+
 int main(int argc, char** argv) {
     int side_size;
     int empty_cells;

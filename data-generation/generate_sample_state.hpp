@@ -8,6 +8,27 @@
 #include <vector>
 #include <stdexcept>
 
+/**
+ * @file generate_sample_state.hpp
+ * @brief Utilities to create random puzzle states for benchmarks and testing.
+ *
+ * Two sampling strategies are provided:
+ * - random walk: perform `target_depth` random legal moves from the goal state
+ * - BFS sampling: collect all states at exact depth and pick one uniformly
+ */
+
+/**
+ * @brief Generate a random state by performing a random walk from the solved state.
+ *
+ * The function starts from the canonical solved state (tiles in order) and
+ * applies `target_depth` uniformly-random legal moves, returning the final state.
+ *
+ * @param side_size Board side length (e.g. 4 for 15-puzzle).
+ * @param empty_cells Number of empty cells on the board.
+ * @param target_depth Number of random moves to perform.
+ * @param rng Random number generator to use (std::mt19937).
+ * @return A sampled `State`.
+ */
 State random_state_random_walk(int side_size, int empty_cells, int target_depth, std::mt19937 &rng) {
     int total = side_size * side_size;
     int ntiles = total - empty_cells;
@@ -24,6 +45,20 @@ State random_state_random_walk(int side_size, int empty_cells, int target_depth,
     return temp_state;
 }
 
+/**
+ * @brief Generate a random state by uniform sampling among states at exact BFS depth.
+ *
+ * The function performs a breadth-first search from the solved state up to
+ * `target_depth` and uniformly selects one of the states at that depth.
+ * This is useful when you want a uniformly-distributed state at a given depth
+ * rather than a biased random-walk sample.
+ *
+ * @param side_size Board side length (e.g. 4 for 15-puzzle).
+ * @param empty_cells Number of empty cells on the board.
+ * @param target_depth Depth to sample at (distance from solved state).
+ * @param rng Random number generator to use (std::mt19937).
+ * @return A sampled `State`. Returns the start (solved) state if no state exists at that depth.
+ */
 State random_state_bfs(int side_size, int empty_cells, int target_depth, std::mt19937 &rng) {
     int total = side_size * side_size;
     int ntiles = total - empty_cells;

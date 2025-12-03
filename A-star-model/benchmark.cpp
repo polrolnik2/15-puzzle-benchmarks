@@ -13,6 +13,14 @@
 
 using namespace std;
 
+/**
+ * @file benchmark.cpp
+ * @brief Simple benchmark runner for the A* puzzle solver.
+ *
+ * This program loads a start state from a file and runs the `PuzzleSolveAstar`
+ * adapter, timing execution and printing a single-line CSV-like summary.
+ */
+
 int main(int argc, char** argv) {
     int side_size;
     int empty_cells;

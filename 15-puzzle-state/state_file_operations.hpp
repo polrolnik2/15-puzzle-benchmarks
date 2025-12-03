@@ -1,6 +1,21 @@
 #ifndef __STATE_FILE_OPERATIONS_HPP___
 #define __STATE_FILE_OPERATIONS_HPP___
 
+/**
+ * @file state_file_operations.hpp
+ * @brief Simple helpers to read/write `State` values from plain text files.
+ *
+ * The file format used by these helpers is a minimal plain-text format:
+ * first line contains `side_length` and `empty_cells`, followed by tile indices.
+ */
+
+/**
+ * @brief Read a `State` from a simple plain-text file.
+ *
+ * @param filename Path to the input file.
+ * @throws std::runtime_error if the file cannot be opened.
+ * @return Constructed `State` instance.
+ */
 State read_state_from_file(const std::string& filename) {
     std::ifstream infile(filename);
     if (!infile.is_open()) {
@@ -16,6 +31,13 @@ State read_state_from_file(const std::string& filename) {
     return State(tiles, empty_cells);
 }
 
+/**
+ * @brief Write a `State` to a simple plain-text file.
+ *
+ * @param state State to serialize.
+ * @param filename Output file path.
+ * @throws std::runtime_error if the file cannot be opened for writing.
+ */
 void write_state_to_file(const State& state, const std::string& filename) {
     std::ofstream outfile(filename);
     if (!outfile.is_open()) {

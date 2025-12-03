@@ -13,6 +13,14 @@
 
 using namespace std;
 
+/**
+ * @file benchmark.cpp
+ * @brief Simple benchmark runner for the BFS puzzle solver.
+ *
+ * Loads a start state from a file and runs `BFSPuzzleSolver`, timing
+ * execution and printing a CSV-like summary line.
+ */
+
 int main(int argc, char** argv) {
     int side_size;
     int empty_cells;

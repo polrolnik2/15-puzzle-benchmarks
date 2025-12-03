@@ -1,0 +1,10 @@
+PROJECT_NAME = "15-puzzle-benchmarks"
+OUTPUT_DIRECTORY = docs
+GENERATE_HTML = YES
+GENERATE_LATEX = NO
+RECURSIVE = YES
+EXTRACT_ALL = YES
+INPUT = 15-puzzle-state A-star-model BFS-solver weighted-A-star-model data-generation
+FILE_PATTERNS = *.hpp *.h *.cpp
+QUIET = YES
+WARNINGS = YES
