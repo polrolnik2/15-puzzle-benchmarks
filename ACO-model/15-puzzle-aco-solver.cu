@@ -73,14 +73,30 @@ __global__ void aco_construct_solutions_kernel(
     int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
     if (ant_id >= params.num_ants) return;
     
+    // Debug: Kernel entry
+    if (ant_id == 0) {
+        printf("Ant 0: Kernel started, num_ants=%d, max_steps=%d\n", params.num_ants, params.max_steps_per_ant);
+    }
+    
     // Initialize random state
     curandState rand_state;
     curand_init(seed, ant_id, 0, &rand_state);
     
     DeviceState current = start_state;
     int path_len = 0;
+    
+    // Debug: Before first write
+    if (ant_id == 0) {
+        printf("Ant 0: About to write initial state to d_ant_paths[%d]\n", ant_id * params.max_steps_per_ant);
+    }
+    
     d_ant_paths[ant_id * params.max_steps_per_ant] = current;
     d_ant_found_goal[ant_id] = 0;
+    
+    // Debug: After first write
+    if (ant_id == 0) {
+        printf("Ant 0: Initial state written successfully\n");
+    }
     
     // First ant only: print debug info
     if (ant_id == 0) {
