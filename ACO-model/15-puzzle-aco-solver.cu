@@ -88,11 +88,18 @@ __global__ void aco_construct_solutions_kernel(
         
         for (int i = 0; i < num_moves; ++i) {
             size_t hash_idx = moves[i].hash() % pheromone_size;
-            float pheromone = d_pheromones[hash_idx];
+            float pheromone = fmaxf(d_pheromones[hash_idx], 0.01f); 
             float heuristic = 1.0f / (1.0f + manhattan_distance_device(moves[i], goal_state, d_weights));
             
             probabilities[i] = powf(pheromone, params.alpha) * powf(heuristic, params.beta);
             total_prob += probabilities[i];
+        }
+        
+        if (total_prob <= 0.0f) {
+            total_prob = (float)num_moves;
+            for (int i = 0; i < num_moves; ++i) {
+                probabilities[i] = 1.0f;
+            }
         }
         
         // Select next move using roulette wheel selection
@@ -107,6 +114,8 @@ __global__ void aco_construct_solutions_kernel(
                 break;
             }
         }
+        
+        if (selected >= num_moves) selected = num_moves - 1;
         
         current = moves[selected];
         path_len++;
