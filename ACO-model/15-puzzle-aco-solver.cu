@@ -1,6 +1,5 @@
 #include "15-puzzle-aco-solver.hpp"
 #include "cuda_state_utils.hpp"
-#include "cuda_distance.hpp"
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
 #include <vector>
