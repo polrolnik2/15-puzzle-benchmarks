@@ -98,15 +98,8 @@ __global__ void aco_construct_solutions_kernel(
             return;
         }
         
-        // Get available moves - allocate on heap to avoid stack overflow
-        DeviceState* moves = (DeviceState*)malloc(current.empty_cells * 4 * sizeof(DeviceState));
-        if (moves == nullptr) {
-            // Out of memory - exit gracefully
-            d_ant_found_goal[ant_id] = -4;
-            d_ant_path_lengths[ant_id] = path_len;
-            return;
-        }
-        
+        // Get available moves - use static array (max 4 moves for 1 empty cell)
+        DeviceState moves[4];
         int num_moves = get_available_moves_device(current, moves);
         
         // Debug output for first ant first iteration
@@ -115,19 +108,17 @@ __global__ void aco_construct_solutions_kernel(
         }
         
         // FAIL: Every state MUST have at least one available move
-        if (num_moves <= 0 || num_moves > current.empty_cells * 4) {
+        if (num_moves <= 0 || num_moves > 4) {
             if (ant_id == 0) {
-                printf("ERROR: Invalid move count! num_moves=%d, expected max=%d\n", 
-                       num_moves, current.empty_cells * 4);
+                printf("ERROR: Invalid move count! num_moves=%d\n", num_moves);
             }
-            free(moves);
             d_ant_found_goal[ant_id] = -5;
             d_ant_path_lengths[ant_id] = path_len;
             return;
         }
         
         // Calculate probabilities based on pheromones and heuristic
-        float* probabilities = (float*)malloc(current.empty_cells * 4 * sizeof(float));
+        float probabilities[4];
         float total_prob = 0.0f;
         
         for (int i = 0; i < num_moves; ++i) {
@@ -173,8 +164,6 @@ __global__ void aco_construct_solutions_kernel(
             if (ant_id == 0) {
                 printf("ERROR: Path length %d exceeded max steps %d\n", path_len, params.max_steps_per_ant);
             }
-            free(moves);
-            free(probabilities);
             d_ant_found_goal[ant_id] = -6;
             d_ant_path_lengths[ant_id] = path_len - 1;
             return;
@@ -187,10 +176,6 @@ __global__ void aco_construct_solutions_kernel(
                    write_index, ant_id, params.max_steps_per_ant, path_len);
         }
         d_ant_paths[write_index] = current;
-        
-        // Free allocated memory
-        free(moves);
-        free(probabilities);
     }
     
     d_ant_path_lengths[ant_id] = path_len;
