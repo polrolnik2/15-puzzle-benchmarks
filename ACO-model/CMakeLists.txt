@@ -14,8 +14,9 @@ target_include_directories(acomodel PUBLIC
     ${CMAKE_SOURCE_DIR}/15-puzzle-state
 )
 
-# Link against the standalone state library
-target_link_libraries(acomodel PUBLIC 15-puzzle-state)
+# Link against CUDA state library for device code
+# and host state library for host code conversion functions
+target_link_libraries(acomodel PUBLIC 15-puzzle-state-cuda 15-puzzle-state)
 
 target_compile_features(acomodel PUBLIC cxx_std_20)
 

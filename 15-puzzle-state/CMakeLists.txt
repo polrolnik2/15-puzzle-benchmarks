@@ -1,3 +1,4 @@
+# Host-only C++ library (used by A*, BFS, benchmarks)
 add_library(15-puzzle-state
     state.cpp
     distance.cpp
@@ -14,3 +15,8 @@ else()
     # default to ON if the option isn't set
     target_compile_definitions(15-puzzle-state PUBLIC USE_FSA_MEMORY=0)
 endif()
+
+# CUDA-compatible library (header-only for device code; used by GPU solvers)
+add_library(15-puzzle-state-cuda INTERFACE)
+target_include_directories(15-puzzle-state-cuda INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_features(15-puzzle-state-cuda INTERFACE cxx_std_20)

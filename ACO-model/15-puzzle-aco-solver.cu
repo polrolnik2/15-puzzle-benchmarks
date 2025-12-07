@@ -16,8 +16,8 @@
  * for all GPU operations.
  */
 
-// Convert host State to DeviceState
-__host__ DeviceState to_device_state(const State& s) {
+// Convert host State to DeviceState (HOST ONLY - uses std::vector)
+DeviceState to_device_state(const State& s) {
     DeviceState ds;
     ds.empty_cells = s.get_empty_cells();
     ds.side_length = 4; // Assuming 4x4 for 15-puzzle
@@ -30,8 +30,8 @@ __host__ DeviceState to_device_state(const State& s) {
     return ds;
 }
 
-// Convert DeviceState back to host State
-__host__ State to_host_state(const DeviceState& ds) {
+// Convert DeviceState back to host State (HOST ONLY - uses std::vector)
+State to_host_state(const DeviceState& ds) {
     std::vector<int> tiles_vec(ds.num_tiles);
     for (int i = 0; i < ds.num_tiles; ++i) {
         tiles_vec[i] = ds.tiles[i];
@@ -39,61 +39,9 @@ __host__ State to_host_state(const DeviceState& ds) {
     return State(tiles_vec, ds.empty_cells, ds.side_length);
 }
 
-// Get empty positions on device
-__device__ int get_empty_positions_device(const DeviceState& state, int* empty_pos) {
-    int num_cells = state.side_length * state.side_length;
-    bool occupied[16] = {false};
-    
-    for (int i = 0; i < state.num_tiles; ++i) {
-        if (state.tiles[i] >= 0 && state.tiles[i] < num_cells) {
-            occupied[state.tiles[i]] = true;
-        }
-    }
-    
-    int count = 0;
-    for (int i = 0; i < num_cells; ++i) {
-        if (!occupied[i]) {
-            empty_pos[count++] = i;
-        }
-    }
-    return count;
-}
-
-// Generate available moves on device
-__device__ int get_available_moves_device(const DeviceState& state, DeviceState* moves) {
-    int empty_pos[16];
-    int num_empty = get_empty_positions_device(state, empty_pos);
-    int num_cells = state.side_length * state.side_length;
-    int move_count = 0;
-    
-    for (int e = 0; e < num_empty; ++e) {
-        int empty = empty_pos[e];
-        int directions[4] = {-state.side_length, state.side_length, -1, 1};
-        
-        for (int d = 0; d < 4; ++d) {
-            int neighbor = empty + directions[d];
-            
-            // Boundary checks
-            if (neighbor < 0 || neighbor >= num_cells) continue;
-            if (directions[d] == -1 && empty % state.side_length == 0) continue;
-            if (directions[d] == 1 && empty % state.side_length == state.side_length - 1) continue;
-            
-            // Create new state
-            DeviceState new_state = state;
-            for (int i = 0; i < state.num_tiles; ++i) {
-                if (new_state.tiles[i] == neighbor) {
-                    new_state.tiles[i] = empty;
-                    moves[move_count++] = new_state;
-                    break;
-                }
-            }
-        }
-    }
-    return move_count;
-}
+// Note: get_empty_positions_device and get_available_moves_device are defined in cuda_state_utils.hpp
 // Note: manhattan_distance_device is now defined in cuda_distance.hpp
-// included at the top of this file
-}
+// All these functions are included at the top of this file
 
 // CUDA kernel: Each ant constructs a path
 __global__ void aco_construct_solutions_kernel(
