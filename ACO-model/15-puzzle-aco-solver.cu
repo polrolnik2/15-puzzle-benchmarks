@@ -57,6 +57,13 @@ State to_host_state(const DeviceState& ds) {
 // Note: manhattan_distance_device is now defined in cuda_distance.hpp
 // All these functions are included at the top of this file
 
+// CUDA kernel: Initialize random states for ants
+__global__ void init_curand_kernel(curandState* rand_states, int num_ants, unsigned long long seed) {
+    int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (ant_id >= num_ants) return;
+    curand_init(seed, ant_id, 0, &rand_states[ant_id]);
+}
+
 // CUDA kernel: Each ant constructs a path
 __global__ void aco_construct_solutions_kernel(
     DeviceState start_state,
@@ -68,7 +75,7 @@ __global__ void aco_construct_solutions_kernel(
     DeviceState* d_ant_paths,      // [num_ants][max_steps_per_ant]
     int* d_ant_path_lengths,       // [num_ants]
     int* d_ant_found_goal,         // [num_ants]
-    unsigned long long seed
+    curandState* rand_states       // Pre-initialized random states
 ) {
     int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
     if (ant_id >= params.num_ants) return;
@@ -78,9 +85,8 @@ __global__ void aco_construct_solutions_kernel(
         printf("Ant 0: Kernel started, num_ants=%d, max_steps=%d\n", params.num_ants, params.max_steps_per_ant);
     }
     
-    // Initialize random state
-    curandState rand_state;
-    curand_init(seed, ant_id, 0, &rand_state);
+    // Use pre-initialized random state
+    curandState local_rand_state = rand_states[ant_id];
     
     DeviceState current = start_state;
     int path_len = 0;
@@ -157,7 +163,7 @@ __global__ void aco_construct_solutions_kernel(
         assert(total_prob > 0.0f && total_prob < 1e9f && "ERROR: Invalid total probability!");
         
         // Select next move using roulette wheel selection
-        float rand_val = curand_uniform(&rand_state) * total_prob;
+        float rand_val = curand_uniform(&local_rand_state) * total_prob;
         float cumulative = 0.0f;
         int selected = 0;
         
@@ -250,12 +256,14 @@ std::vector<State> PuzzleSolveACO(
     DeviceState* d_ant_paths;
     int* d_ant_path_lengths;
     int* d_ant_found_goal;
+    curandState* d_rand_states;
     
     CHECK_CUDA(cudaMalloc(&d_pheromones, pheromone_table_size * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&d_weights, weights.size() * sizeof(int)));
     CHECK_CUDA(cudaMalloc(&d_ant_paths, params.num_ants * params.max_steps_per_ant * sizeof(DeviceState)));
     CHECK_CUDA(cudaMalloc(&d_ant_path_lengths, params.num_ants * sizeof(int)));
     CHECK_CUDA(cudaMalloc(&d_ant_found_goal, params.num_ants * sizeof(int)));
+    CHECK_CUDA(cudaMalloc(&d_rand_states, params.num_ants * sizeof(curandState)));
     
     std::cout << "Allocated device memory successfully" << std::endl;
     
@@ -264,21 +272,29 @@ std::vector<State> PuzzleSolveACO(
     CHECK_CUDA(cudaMemcpy(d_pheromones, init_pheromones.data(), pheromone_table_size * sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(d_weights, weights.data(), weights.size() * sizeof(int), cudaMemcpyHostToDevice));
     
+    // Initialize random states (do this once, not every iteration)
+    int threads_per_block = 64;  // Reduced for curand_init
+    int blocks = (params.num_ants + threads_per_block - 1) / threads_per_block;
+    init_curand_kernel<<<blocks, threads_per_block>>>(d_rand_states, params.num_ants, 12345ULL);
+    CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
+    std::cout << "Initialized random states" << std::endl;
+    
     // Best solution tracking
     std::vector<State> best_solution;
     int best_length = INT_MAX;
     int total_visited = 0;
     
     // ACO main loop
-    int threads_per_block = 256;
-    int blocks = (params.num_ants + threads_per_block - 1) / threads_per_block;
+    threads_per_block = 128;  // Can use more now that curand_init is separate
+    blocks = (params.num_ants + threads_per_block - 1) / threads_per_block;
     
     for (int iter = 0; iter < params.max_iterations; ++iter) {
         // Construct solutions
         aco_construct_solutions_kernel<<<blocks, threads_per_block>>>(
             d_start, d_goal, d_weights, d_pheromones, pheromone_table_size,
             params, d_ant_paths, d_ant_path_lengths, d_ant_found_goal,
-            (unsigned long long)(iter * 12345)
+            d_rand_states
         );
         CHECK_CUDA(cudaGetLastError());
         std::cout << "Iteration " << iter << ": Kernel launched successfully" << std::endl;
@@ -341,6 +357,7 @@ std::vector<State> PuzzleSolveACO(
     cudaFree(d_ant_paths);
     cudaFree(d_ant_path_lengths);
     cudaFree(d_ant_found_goal);
+    cudaFree(d_rand_states);
     
     if (visited_nodes) *visited_nodes = total_visited;
     
