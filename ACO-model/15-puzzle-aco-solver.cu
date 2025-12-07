@@ -5,6 +5,7 @@
 #include <cassert>
 #include <vector>
 #include <algorithm>
+#include <iostream>
 #include <limits>
 #include <cmath>
 
