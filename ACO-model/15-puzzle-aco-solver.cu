@@ -158,9 +158,6 @@ __global__ void aco_construct_solutions_kernel(
         
         // FAIL: Path length MUST not exceed buffer
         if (path_len >= max_steps_per_ant) {
-            if (ant_id == 0) {
-                printf("ERROR: Path length %d exceeded max steps %d\n", path_len, max_steps_per_ant);
-            }
             d_ant_found_goal[ant_id] = -6;
             d_ant_path_lengths[ant_id] = path_len - 1;
             return;
