@@ -17,6 +17,16 @@
  * for all GPU operations.
  */
 
+// CUDA error checking macro
+#define CHECK_CUDA(call) \
+    do { \
+        cudaError_t err = call; \
+        if (err != cudaSuccess) { \
+            fprintf(stderr, "CUDA Error at line %d: %s\n", __LINE__, cudaGetErrorString(err)); \
+            exit(1); \
+        } \
+    } while(0)
+
 // Convert host State to DeviceState (HOST ONLY - uses std::vector)
 DeviceState to_device_state(const State& s) {
     DeviceState ds;
@@ -206,16 +216,18 @@ std::vector<State> PuzzleSolveACO(
     int* d_ant_path_lengths;
     int* d_ant_found_goal;
     
-    cudaMalloc(&d_pheromones, pheromone_table_size * sizeof(float));
-    cudaMalloc(&d_weights, weights.size() * sizeof(int));
-    cudaMalloc(&d_ant_paths, params.num_ants * params.max_steps_per_ant * sizeof(DeviceState));
-    cudaMalloc(&d_ant_path_lengths, params.num_ants * sizeof(int));
-    cudaMalloc(&d_ant_found_goal, params.num_ants * sizeof(int));
+    CHECK_CUDA(cudaMalloc(&d_pheromones, pheromone_table_size * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&d_weights, weights.size() * sizeof(int)));
+    CHECK_CUDA(cudaMalloc(&d_ant_paths, params.num_ants * params.max_steps_per_ant * sizeof(DeviceState)));
+    CHECK_CUDA(cudaMalloc(&d_ant_path_lengths, params.num_ants * sizeof(int)));
+    CHECK_CUDA(cudaMalloc(&d_ant_found_goal, params.num_ants * sizeof(int)));
+    
+    std::cout << "Allocated device memory successfully" << std::endl;
     
     // Initialize pheromones
     std::vector<float> init_pheromones(pheromone_table_size, params.initial_pheromone);
-    cudaMemcpy(d_pheromones, init_pheromones.data(), pheromone_table_size * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_weights, weights.data(), weights.size() * sizeof(int), cudaMemcpyHostToDevice);
+    CHECK_CUDA(cudaMemcpy(d_pheromones, init_pheromones.data(), pheromone_table_size * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_weights, weights.data(), weights.size() * sizeof(int), cudaMemcpyHostToDevice));
     
     // Best solution tracking
     std::vector<State> best_solution;
@@ -233,7 +245,9 @@ std::vector<State> PuzzleSolveACO(
             params, d_ant_paths, d_ant_path_lengths, d_ant_found_goal,
             (unsigned long long)(iter * 12345)
         );
-        cudaDeviceSynchronize();
+        CHECK_CUDA(cudaGetLastError());
+        std::cout << "Iteration " << iter << ": Kernel launched successfully" << std::endl;
+        CHECK_CUDA(cudaDeviceSynchronize());
         
         // Copy results back
         std::vector<int> h_path_lengths(params.num_ants);
