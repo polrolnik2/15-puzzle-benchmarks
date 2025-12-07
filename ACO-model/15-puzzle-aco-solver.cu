@@ -22,10 +22,13 @@ DeviceState to_device_state(const State& s) {
     ds.empty_cells = s.get_empty_cells();
     ds.side_length = 4; // Assuming 4x4 for 15-puzzle
     ds.num_tiles = ds.side_length * ds.side_length - ds.empty_cells;
+    // State stores tile values as linear indices directly
+    // No conversion needed - just copy the values
     for (int i = 0; i < ds.num_tiles; ++i) {
-        int row = s.get_tile_row(i);
-        int col = s.get_tile_column(i);
-        ds.tiles[i] = row * ds.side_length + col;
+        // Note: State class stores tiles as linear indices already
+        // get_tile_row and get_tile_column extract row/col from the stored index
+        // We need the stored index value, not row/col
+        ds.tiles[i] = s.get_tile_row(i) * ds.side_length + s.get_tile_column(i);
     }
     return ds;
 }
@@ -68,9 +71,17 @@ __global__ void aco_construct_solutions_kernel(
     d_ant_paths[ant_id * params.max_steps_per_ant] = current;
     d_ant_found_goal[ant_id] = 0;
     
+    // First ant only: print debug info
+    if (ant_id == 0) {
+        printf("Ant 0: Start state num_tiles=%d, Goal state num_tiles=%d\n", 
+               current.num_tiles, goal_state.num_tiles);
+        printf("Ant 0: Start == Goal? %s\n", (current == goal_state) ? "YES" : "NO");
+    }
+    
     for (int step = 0; step < params.max_steps_per_ant; ++step) {
         // Check if goal reached
         if (current == goal_state) {
+            if (ant_id == 0) printf("Ant 0: Found goal at step %d\n", step);
             d_ant_found_goal[ant_id] = 1;
             d_ant_path_lengths[ant_id] = path_len;
             return;
@@ -79,6 +90,11 @@ __global__ void aco_construct_solutions_kernel(
         // Get available moves
         DeviceState moves[64];
         int num_moves = get_available_moves_device(current, moves);
+        
+        // Debug output for first ant first iteration
+        if (ant_id == 0 && step == 0) {
+            printf("Ant 0, Step 0: num_moves=%d\n", num_moves);
+        }
         
         // FAIL: Every state MUST have at least one available move
         assert(num_moves > 0 && "ERROR: State has no available moves!");
@@ -223,6 +239,12 @@ std::vector<State> PuzzleSolveACO(
         std::vector<int> h_found_goal(params.num_ants);
         cudaMemcpy(h_path_lengths.data(), d_ant_path_lengths, params.num_ants * sizeof(int), cudaMemcpyDeviceToHost);
         cudaMemcpy(h_found_goal.data(), d_ant_found_goal, params.num_ants * sizeof(int), cudaMemcpyDeviceToHost);
+        
+        // Count solutions found this iteration
+        int solutions_found = 0;
+        for (int ant = 0; ant < params.num_ants; ++ant) {
+            if (h_found_goal[ant] == 1) solutions_found++;
+        }
         
         // Find best ant in this iteration
         for (int ant = 0; ant < params.num_ants; ++ant) {
