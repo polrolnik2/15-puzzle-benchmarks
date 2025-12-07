@@ -2,6 +2,7 @@
 #include "cuda_state_utils.hpp"
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
+#include <cassert>
 #include <vector>
 #include <algorithm>
 #include <limits>
