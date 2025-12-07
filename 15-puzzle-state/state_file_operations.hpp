@@ -1,6 +1,10 @@
 #ifndef __STATE_FILE_OPERATIONS_HPP___
 #define __STATE_FILE_OPERATIONS_HPP___
 
+#include <fstream>
+#include <string>
+#include <vector>
+
 /**
  * @file state_file_operations.hpp
  * @brief Simple helpers to read/write `State` values from plain text files.

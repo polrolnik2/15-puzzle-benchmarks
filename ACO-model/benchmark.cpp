@@ -2,6 +2,7 @@
 #include <vector>
 #include <chrono>
 #include <string>
+#include <sstream>
 
 #include "state.hpp"
 #include "state_file_operations.hpp"
