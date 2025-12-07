@@ -1,9 +1,9 @@
 #include "15-puzzle-aco-solver.hpp"
-#include "distance.hpp"
+#include "cuda_state_utils.hpp"
+#include "cuda_distance.hpp"
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
 #include <vector>
-#include <unordered_map>
 #include <algorithm>
 #include <limits>
 #include <cmath>
@@ -11,35 +11,10 @@
 /**
  * @file 15-puzzle-aco-solver.cu
  * @brief CUDA kernels and host code for ACO-based puzzle solving.
+ * 
+ * Uses DeviceState from cuda_state_utils.hpp and cuda_distance.hpp
+ * for all GPU operations.
  */
-
-// Device-compatible state representation (fixed-size for GPU)
-struct DeviceState {
-    int tiles[16];      // Max tiles (for 4x4 with 1 empty)
-    int num_tiles;      // Actual number of tiles
-    int empty_cells;
-    int side_length;
-    
-    __device__ __host__ DeviceState() : num_tiles(0), empty_cells(0), side_length(0) {
-        for (int i = 0; i < 16; ++i) tiles[i] = -1;
-    }
-    
-    __device__ __host__ bool operator==(const DeviceState& other) const {
-        if (num_tiles != other.num_tiles || empty_cells != other.empty_cells) return false;
-        for (int i = 0; i < num_tiles; ++i) {
-            if (tiles[i] != other.tiles[i]) return false;
-        }
-        return true;
-    }
-    
-    __device__ __host__ size_t hash() const {
-        size_t h = 0;
-        for (int i = 0; i < num_tiles; ++i) {
-            h ^= tiles[i] + 0x9e3779b9 + (h << 6) + (h >> 2);
-        }
-        return h;
-    }
-};
 
 // Convert host State to DeviceState
 __host__ DeviceState to_device_state(const State& s) {
@@ -116,23 +91,8 @@ __device__ int get_available_moves_device(const DeviceState& state, DeviceState*
     }
     return move_count;
 }
-
-// Manhattan distance heuristic on device
-__device__ int manhattan_distance_device(const DeviceState& state, const DeviceState& goal, const int* weights) {
-    int dist = 0;
-    for (int i = 0; i < state.num_tiles; ++i) {
-        int curr_pos = state.tiles[i];
-        int goal_pos = goal.tiles[i];
-        
-        int curr_row = curr_pos / state.side_length;
-        int curr_col = curr_pos % state.side_length;
-        int goal_row = goal_pos / state.side_length;
-        int goal_col = goal_pos % state.side_length;
-        
-        int tile_dist = abs(curr_row - goal_row) + abs(curr_col - goal_col);
-        dist += tile_dist * weights[i];
-    }
-    return dist;
+// Note: manhattan_distance_device is now defined in cuda_distance.hpp
+// included at the top of this file
 }
 
 // CUDA kernel: Each ant constructs a path
