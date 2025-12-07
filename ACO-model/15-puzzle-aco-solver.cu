@@ -98,8 +98,15 @@ __global__ void aco_construct_solutions_kernel(
             return;
         }
         
-        // Get available moves
-        DeviceState moves[64];
+        // Get available moves - allocate on heap to avoid stack overflow
+        DeviceState* moves = (DeviceState*)malloc(current.empty_cells * 4 * sizeof(DeviceState));
+        if (moves == nullptr) {
+            // Out of memory - exit gracefully
+            d_ant_found_goal[ant_id] = -4;
+            d_ant_path_lengths[ant_id] = path_len;
+            return;
+        }
+        
         int num_moves = get_available_moves_device(current, moves);
         
         // Debug output for first ant first iteration
@@ -108,11 +115,10 @@ __global__ void aco_construct_solutions_kernel(
         }
         
         // FAIL: Every state MUST have at least one available move
-        assert(num_moves > 0 && "ERROR: State has no available moves!");
-        assert(num_moves <= 64 && "ERROR: Too many moves generated!");
+        assert(num_moves > 0 && num_moves <= current.empty_cells * 4 && "ERROR: Invalid move count!");
         
         // Calculate probabilities based on pheromones and heuristic
-        float probabilities[64];
+        float probabilities[current.empty_cells * 4];
         float total_prob = 0.0f;
         
         for (int i = 0; i < num_moves; ++i) {
@@ -157,6 +163,9 @@ __global__ void aco_construct_solutions_kernel(
         assert(path_len < params.max_steps_per_ant && "ERROR: Path length exceeded max steps!");
         
         d_ant_paths[ant_id * params.max_steps_per_ant + path_len] = current;
+        
+        // Free allocated memory
+        free(moves);
     }
     
     d_ant_path_lengths[ant_id] = path_len;
