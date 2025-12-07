@@ -123,7 +123,7 @@ __global__ void aco_construct_solutions_kernel(
         
         if (ant_id == 0 && step == 0) {
             printf("TEST: Got %d moves\n", num_moves);
-        }/ Debug output for first ant first iteration
+        }
         if (ant_id == 0 && step == 0) {
         
         // FAIL: Every state MUST have at least one available move
