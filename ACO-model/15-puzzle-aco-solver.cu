@@ -78,8 +78,24 @@ __global__ void aco_construct_solutions_kernel(
     curandState* rand_states       // Pre-initialized random states
 ) {
     int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // MINIMAL TEST: Just print and return
+    if (ant_id == 0) {
+        printf("MINIMAL TEST: Thread 0 executing\n");
+    }
     if (ant_id >= params.num_ants) return;
     
+    // Initialize output arrays
+    d_ant_found_goal[ant_id] = 0;
+    d_ant_path_lengths[ant_id] = 0;
+    
+    if (ant_id == 0) {
+        printf("MINIMAL TEST: Thread 0 completed\n");
+    }
+    return;
+    
+    // OLD CODE DISABLED FOR TESTING
+    /*
     // Debug: Kernel entry - use a simple printf first
     if (ant_id == 0) {
         printf("Ant 0: Entered kernel\n");
@@ -92,29 +108,12 @@ __global__ void aco_construct_solutions_kernel(
     if (ant_id == 0) {
         printf("Ant 0: Got random state\n");
     }
-    
+    */
     DeviceState current = start_state;
     int path_len = 0;
     
-    // Debug: Before first write
-    if (ant_id == 0) {
-        printf("Ant 0: About to write initial state to d_ant_paths[%d]\n", ant_id * params.max_steps_per_ant);
-    }
-    
     d_ant_paths[ant_id * params.max_steps_per_ant] = current;
-    d_ant_found_goal[ant_id] = 0;
-    
-    // Debug: After first write
-    if (ant_id == 0) {
-        printf("Ant 0: Initial state written successfully\n");
-    }
-    
-    // First ant only: print debug info
-    if (ant_id == 0) {
-        printf("Ant 0: Start state num_tiles=%d, Goal state num_tiles=%d\n", 
-               current.num_tiles, goal_state.num_tiles);
-        printf("Ant 0: Start == Goal? %s\n", (current == goal_state) ? "YES" : "NO");
-    }
+    /*
     
     for (int step = 0; step < params.max_steps_per_ant; ++step) {
         // Check if goal reached
@@ -206,6 +205,7 @@ __global__ void aco_construct_solutions_kernel(
     }
     
     d_ant_path_lengths[ant_id] = path_len;
+    */
 }
 
 // CUDA kernel: Evaporate pheromones
