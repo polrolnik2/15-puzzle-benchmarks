@@ -81,7 +81,7 @@ __global__ void aco_construct_solutions_kernel(
         int num_moves = get_available_moves_device(current, moves);
         
         // FAIL: Every state MUST have at least one available move
-        assert(num_moves == 0 && "ERROR: State has no available moves!");
+        assert(num_moves > 0 && "ERROR: State has no available moves!");
         assert(num_moves <= 64 && "ERROR: Too many moves generated!");
         
         // Calculate probabilities based on pheromones and heuristic
