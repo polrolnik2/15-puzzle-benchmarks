@@ -79,7 +79,9 @@ __global__ void aco_construct_solutions_kernel(
         DeviceState moves[64];
         int num_moves = get_available_moves_device(current, moves);
         
-        if (num_moves == 0) break;
+        // FAIL: Every state MUST have at least one available move
+        assert(num_moves == 0 && "ERROR: State has no available moves!");
+        assert(num_moves <= 64 && "ERROR: Too many moves generated!");
         
         // Calculate probabilities based on pheromones and heuristic
         float probabilities[64];
@@ -90,16 +92,19 @@ __global__ void aco_construct_solutions_kernel(
             float pheromone = fmaxf(d_pheromones[hash_idx], 0.01f); 
             float heuristic = 1.0f / (1.0f + manhattan_distance_device(moves[i], goal_state, d_weights));
             
+            // FAIL: Heuristic MUST be in valid range
+            assert(heuristic > 0.0f && heuristic <= 1.0f && "ERROR: Invalid heuristic value!");
+            
             probabilities[i] = powf(pheromone, params.alpha) * powf(heuristic, params.beta);
+            
+            // FAIL: Probability must be valid (not NaN or Inf)
+            assert(probabilities[i] >= 0.0f && probabilities[i] < 1e9f && "ERROR: Invalid probability!");
+            
             total_prob += probabilities[i];
         }
         
-        if (total_prob <= 0.0f) {
-            total_prob = (float)num_moves;
-            for (int i = 0; i < num_moves; ++i) {
-                probabilities[i] = 1.0f;
-            }
-        }
+        // FAIL: Total probability MUST be valid
+        assert(total_prob > 0.0f && total_prob < 1e9f && "ERROR: Invalid total probability!");
         
         // Select next move using roulette wheel selection
         float rand_val = curand_uniform(&rand_state) * total_prob;
@@ -114,10 +119,15 @@ __global__ void aco_construct_solutions_kernel(
             }
         }
         
-        if (selected >= num_moves) selected = num_moves - 1;
+        // FAIL: Selected move MUST be valid
+        assert(selected >= 0 && selected < num_moves && "ERROR: Invalid move selection!");
         
         current = moves[selected];
         path_len++;
+        
+        // FAIL: Path length MUST not exceed buffer
+        assert(path_len < params.max_steps_per_ant && "ERROR: Path length exceeded max steps!");
+        
         d_ant_paths[ant_id * params.max_steps_per_ant + path_len] = current;
     }
     
@@ -216,6 +226,7 @@ std::vector<State> PuzzleSolveACO(
         // Find best ant in this iteration
         for (int ant = 0; ant < params.num_ants; ++ant) {
             total_visited += h_path_lengths[ant];
+            
             if (h_found_goal[ant] == 1 && h_path_lengths[ant] < best_length) {
                 best_length = h_path_lengths[ant];
                 
