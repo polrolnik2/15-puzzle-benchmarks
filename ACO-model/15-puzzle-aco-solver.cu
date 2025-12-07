@@ -118,7 +118,7 @@ __global__ void aco_construct_solutions_kernel(
         assert(num_moves > 0 && num_moves <= current.empty_cells * 4 && "ERROR: Invalid move count!");
         
         // Calculate probabilities based on pheromones and heuristic
-        float probabilities[current.empty_cells * 4];
+        float* probabilities = (float*)malloc(current.empty_cells * 4 * sizeof(float));
         float total_prob = 0.0f;
         
         for (int i = 0; i < num_moves; ++i) {
@@ -166,6 +166,7 @@ __global__ void aco_construct_solutions_kernel(
         
         // Free allocated memory
         free(moves);
+        free(probabilities);
     }
     
     d_ant_path_lengths[ant_id] = path_len;
