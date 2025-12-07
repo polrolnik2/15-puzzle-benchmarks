@@ -78,74 +78,70 @@ __global__ void aco_construct_solutions_kernel(
     curandState* rand_states       // Pre-initialized random states
 ) {
     int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    // MINIMAL TEST: Just print and return
-    if (ant_id == 0) {
-        printf("MINIMAL TEST: Thread 0 executing\n");
-    }
     if (ant_id >= params.num_ants) return;
     
-    // Initialize output arrays
+    if (ant_id == 0) {
+        printf("TEST: Accessing rand_states...\n");
+    }
+    
+    curandState local_rand_state = rand_states[ant_id];
+    
+    if (ant_id == 0) {
+        printf("TEST: Got rand_state, initializing variables...\n");
+    }
+    
+    DeviceState current = start_state;
+    int path_len = 0;
+    
+    if (ant_id == 0) {
+        printf("TEST: Writing to d_ant_paths...\n");
+    }
+    
+    d_ant_paths[ant_id * params.max_steps_per_ant] = current;
     d_ant_found_goal[ant_id] = 0;
     d_ant_path_lengths[ant_id] = 0;
     
     if (ant_id == 0) {
-        printf("MINIMAL TEST: Thread 0 completed\n");
+        printf("TEST: Initialization complete, starting loop\n");
     }
-    return;
-    
-    // OLD CODE DISABLED FOR TESTING
-    /*
-    // Debug: Kernel entry - use a simple printf first
-    if (ant_id == 0) {
-        printf("Ant 0: Entered kernel\n");
-    }
-    
-    // Use pre-initialized random state - add bounds check
-    if (ant_id >= params.num_ants) return;  // Double check
-    curandState local_rand_state = rand_states[ant_id];
-    
-    if (ant_id == 0) {
-        printf("Ant 0: Got random state\n");
-    }
-    */
-    DeviceState current = start_state;
-    int path_len = 0;
-    
-    d_ant_paths[ant_id * params.max_steps_per_ant] = current;
-    /*
     
     for (int step = 0; step < params.max_steps_per_ant; ++step) {
         // Check if goal reached
         if (current == goal_state) {
-            if (ant_id == 0) printf("Ant 0: Found goal at step %d\n", step);
             d_ant_found_goal[ant_id] = 1;
             d_ant_path_lengths[ant_id] = path_len;
             return;
+        }
+        
+        if (ant_id == 0 && step == 0) {
+            printf("TEST: Getting available moves\n");
         }
         
         // Get available moves - use static array (max 4 moves for 1 empty cell)
         DeviceState moves[4];
         int num_moves = get_available_moves_device(current, moves);
         
-        // Debug output for first ant first iteration
         if (ant_id == 0 && step == 0) {
-            printf("Ant 0, Step 0: num_moves=%d, empty_cells=%d\n", num_moves, current.empty_cells);
-        }
+            printf("TEST: Got %d moves\n", num_moves);
+        }/ Debug output for first ant first iteration
+        if (ant_id == 0 && step == 0) {
         
         // FAIL: Every state MUST have at least one available move
         if (num_moves <= 0 || num_moves > 4) {
-            if (ant_id == 0) {
-                printf("ERROR: Invalid move count! num_moves=%d\n", num_moves);
-            }
             d_ant_found_goal[ant_id] = -5;
             d_ant_path_lengths[ant_id] = path_len;
             return;
         }
         
+        if (ant_id == 0 && step == 0) {
+            printf("TEST: Calculating probabilities\n");
+        }
+        
         // Calculate probabilities based on pheromones and heuristic
         float probabilities[4];
         float total_prob = 0.0f;
+        
+        for (int i = 0; i < num_moves; ++i) {
         
         for (int i = 0; i < num_moves; ++i) {
             size_t hash_idx = moves[i].hash() % pheromone_size;
@@ -159,13 +155,17 @@ __global__ void aco_construct_solutions_kernel(
             
             // FAIL: Probability must be valid (not NaN or Inf)
             assert(probabilities[i] >= 0.0f && probabilities[i] < 1e9f && "ERROR: Invalid probability!");
-            
             total_prob += probabilities[i];
+        }
+        
+        if (ant_id == 0 && step == 0) {
+            printf("TEST: Probabilities calculated, total_prob=%f\n", total_prob);
         }
         
         // FAIL: Total probability MUST be valid
         assert(total_prob > 0.0f && total_prob < 1e9f && "ERROR: Invalid total probability!");
         
+        // Select next move using roulette wheel selection
         // Select next move using roulette wheel selection
         float rand_val = curand_uniform(&local_rand_state) * total_prob;
         float cumulative = 0.0f;
@@ -173,39 +173,36 @@ __global__ void aco_construct_solutions_kernel(
         
         for (int i = 0; i < num_moves; ++i) {
             cumulative += probabilities[i];
-            if (rand_val <= cumulative) {
-                selected = i;
-                break;
-            }
-        }
         
         // FAIL: Selected move MUST be valid
         assert(selected >= 0 && selected < num_moves && "ERROR: Invalid move selection!");
+        
+        if (ant_id == 0 && step == 0) {
+            printf("TEST: Selected move %d, updating state\n", selected);
+        }
         
         current = moves[selected];
         path_len++;
         
         // FAIL: Path length MUST not exceed buffer
         if (path_len >= params.max_steps_per_ant) {
-            if (ant_id == 0) {
-                printf("ERROR: Path length %d exceeded max steps %d\n", path_len, params.max_steps_per_ant);
-            }
             d_ant_found_goal[ant_id] = -6;
             d_ant_path_lengths[ant_id] = path_len - 1;
             return;
         }
         
-        // Write to path array with bounds check
-        size_t write_index = ant_id * params.max_steps_per_ant + path_len;
+        d_ant_paths[ant_id * params.max_steps_per_ant + path_len] = current;
+        
         if (ant_id == 0 && step == 0) {
-            printf("Ant 0: Writing to index %zu (ant_id=%d, max_steps=%d, path_len=%d)\n",
-                   write_index, ant_id, params.max_steps_per_ant, path_len);
+            printf("TEST: Step 0 complete\n");
         }
+    }
+    
+    d_ant_path_lengths[ant_id] = path_len;  }
         d_ant_paths[write_index] = current;
     }
     
     d_ant_path_lengths[ant_id] = path_len;
-    */
 }
 
 // CUDA kernel: Evaporate pheromones
