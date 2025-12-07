@@ -5,6 +5,7 @@
 #include <cassert>
 #include <vector>
 #include <algorithm>
+#include <iostream>
 #include <limits>
 #include <cmath>
 
@@ -16,16 +17,29 @@
  * for all GPU operations.
  */
 
+// CUDA error checking macro
+#define CHECK_CUDA(call) \
+    do { \
+        cudaError_t err = call; \
+        if (err != cudaSuccess) { \
+            fprintf(stderr, "CUDA Error at line %d: %s\n", __LINE__, cudaGetErrorString(err)); \
+            exit(1); \
+        } \
+    } while(0)
+
 // Convert host State to DeviceState (HOST ONLY - uses std::vector)
 DeviceState to_device_state(const State& s) {
     DeviceState ds;
     ds.empty_cells = s.get_empty_cells();
     ds.side_length = 4; // Assuming 4x4 for 15-puzzle
     ds.num_tiles = ds.side_length * ds.side_length - ds.empty_cells;
+    // State stores tile values as linear indices directly
+    // No conversion needed - just copy the values
     for (int i = 0; i < ds.num_tiles; ++i) {
-        int row = s.get_tile_row(i);
-        int col = s.get_tile_column(i);
-        ds.tiles[i] = row * ds.side_length + col;
+        // Note: State class stores tiles as linear indices already
+        // get_tile_row and get_tile_column extract row/col from the stored index
+        // We need the stored index value, not row/col
+        ds.tiles[i] = s.get_tile_row(i) * ds.side_length + s.get_tile_column(i);
     }
     return ds;
 }
@@ -43,6 +57,13 @@ State to_host_state(const DeviceState& ds) {
 // Note: manhattan_distance_device is now defined in cuda_distance.hpp
 // All these functions are included at the top of this file
 
+// CUDA kernel: Initialize random states for ants
+__global__ void init_curand_kernel(curandState* rand_states, int num_ants, unsigned long long seed) {
+    int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (ant_id >= num_ants) return;
+    curand_init(seed, ant_id, 0, &rand_states[ant_id]);
+}
+
 // CUDA kernel: Each ant constructs a path
 __global__ void aco_construct_solutions_kernel(
     DeviceState start_state,
@@ -50,25 +71,28 @@ __global__ void aco_construct_solutions_kernel(
     int* d_weights,
     float* d_pheromones,
     int pheromone_size,
-    ACOParams params,
+    int num_ants,
+    int max_steps_per_ant,
+    float alpha,
+    float beta,
     DeviceState* d_ant_paths,      // [num_ants][max_steps_per_ant]
     int* d_ant_path_lengths,       // [num_ants]
     int* d_ant_found_goal,         // [num_ants]
-    unsigned long long seed
+    curandState* rand_states       // Pre-initialized random states
 ) {
     int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
-    if (ant_id >= params.num_ants) return;
-    
-    // Initialize random state
-    curandState rand_state;
-    curand_init(seed, ant_id, 0, &rand_state);
+    if (ant_id >= num_ants) return;    
+    // Use pre-initialized random state - add bounds check
+    if (ant_id >= num_ants) return;  // Double check
+    curandState local_rand_state = rand_states[ant_id];
     
     DeviceState current = start_state;
     int path_len = 0;
-    d_ant_paths[ant_id * params.max_steps_per_ant] = current;
+    
+    d_ant_paths[ant_id * max_steps_per_ant] = current;
     d_ant_found_goal[ant_id] = 0;
     
-    for (int step = 0; step < params.max_steps_per_ant; ++step) {
+    for (int step = 0; step < max_steps_per_ant; ++step) {
         // Check if goal reached
         if (current == goal_state) {
             d_ant_found_goal[ant_id] = 1;
@@ -76,16 +100,22 @@ __global__ void aco_construct_solutions_kernel(
             return;
         }
         
-        // Get available moves
-        DeviceState moves[64];
+        // Get available moves - use static array (max 4 moves for 1 empty cell)
+        DeviceState moves[4];
         int num_moves = get_available_moves_device(current, moves);
-        
+
         // FAIL: Every state MUST have at least one available move
-        assert(num_moves > 0 && "ERROR: State has no available moves!");
-        assert(num_moves <= 64 && "ERROR: Too many moves generated!");
+        if (num_moves <= 0 || num_moves > 4) {
+            if (ant_id == 0) {
+                printf("ERROR: Invalid move count! num_moves=%d\n", num_moves);
+            }
+            d_ant_found_goal[ant_id] = -5;
+            d_ant_path_lengths[ant_id] = path_len;
+            return;
+        }
         
         // Calculate probabilities based on pheromones and heuristic
-        float probabilities[64];
+        float probabilities[4];
         float total_prob = 0.0f;
         
         for (int i = 0; i < num_moves; ++i) {
@@ -96,7 +126,7 @@ __global__ void aco_construct_solutions_kernel(
             // FAIL: Heuristic MUST be in valid range
             assert(heuristic > 0.0f && heuristic <= 1.0f && "ERROR: Invalid heuristic value!");
             
-            probabilities[i] = powf(pheromone, params.alpha) * powf(heuristic, params.beta);
+            probabilities[i] = powf(pheromone, alpha) * powf(heuristic, beta);
             
             // FAIL: Probability must be valid (not NaN or Inf)
             assert(probabilities[i] >= 0.0f && probabilities[i] < 1e9f && "ERROR: Invalid probability!");
@@ -108,7 +138,7 @@ __global__ void aco_construct_solutions_kernel(
         assert(total_prob > 0.0f && total_prob < 1e9f && "ERROR: Invalid total probability!");
         
         // Select next move using roulette wheel selection
-        float rand_val = curand_uniform(&rand_state) * total_prob;
+        float rand_val = curand_uniform(&local_rand_state) * total_prob;
         float cumulative = 0.0f;
         int selected = 0;
         
@@ -127,9 +157,15 @@ __global__ void aco_construct_solutions_kernel(
         path_len++;
         
         // FAIL: Path length MUST not exceed buffer
-        assert(path_len < params.max_steps_per_ant && "ERROR: Path length exceeded max steps!");
+        if (path_len >= max_steps_per_ant) {
+            d_ant_found_goal[ant_id] = -6;
+            d_ant_path_lengths[ant_id] = path_len - 1;
+            return;
+        }
         
-        d_ant_paths[ant_id * params.max_steps_per_ant + path_len] = current;
+        // Write to path array with bounds check
+        size_t write_index = ant_id * max_steps_per_ant + path_len;
+        d_ant_paths[write_index] = current;
     }
     
     d_ant_path_lengths[ant_id] = path_len;
@@ -177,9 +213,22 @@ std::vector<State> PuzzleSolveACO(
     const ACOParams& params,
     int* visited_nodes
 ) {
+    // Validate inputs
+    if (weights.empty()) {
+        std::cerr << "ERROR: weights vector is empty!" << std::endl;
+        return {};
+    }
+    
     // Convert to device states
     DeviceState d_start = to_device_state(start);
     DeviceState d_goal = to_device_state(goal);
+    
+    // Validate weights size matches number of tiles
+    if (weights.size() < (size_t)d_start.num_tiles) {
+        std::cerr << "ERROR: weights size (" << weights.size() 
+                  << ") is less than num_tiles (" << d_start.num_tiles << ")" << std::endl;
+        return {};
+    }
     
     // Allocate device memory
     int pheromone_table_size = 100000; // Hash table size
@@ -188,17 +237,25 @@ std::vector<State> PuzzleSolveACO(
     DeviceState* d_ant_paths;
     int* d_ant_path_lengths;
     int* d_ant_found_goal;
+    curandState* d_rand_states;
     
-    cudaMalloc(&d_pheromones, pheromone_table_size * sizeof(float));
-    cudaMalloc(&d_weights, weights.size() * sizeof(int));
-    cudaMalloc(&d_ant_paths, params.num_ants * params.max_steps_per_ant * sizeof(DeviceState));
-    cudaMalloc(&d_ant_path_lengths, params.num_ants * sizeof(int));
-    cudaMalloc(&d_ant_found_goal, params.num_ants * sizeof(int));
-    
+    CHECK_CUDA(cudaMalloc(&d_pheromones, pheromone_table_size * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&d_weights, weights.size() * sizeof(int)));
+    CHECK_CUDA(cudaMalloc(&d_ant_paths, params.num_ants * params.max_steps_per_ant * sizeof(DeviceState)));
+    CHECK_CUDA(cudaMalloc(&d_ant_path_lengths, params.num_ants * sizeof(int)));
+    CHECK_CUDA(cudaMalloc(&d_ant_found_goal, params.num_ants * sizeof(int)));
+    CHECK_CUDA(cudaMalloc(&d_rand_states, params.num_ants * sizeof(curandState)));    
     // Initialize pheromones
     std::vector<float> init_pheromones(pheromone_table_size, params.initial_pheromone);
-    cudaMemcpy(d_pheromones, init_pheromones.data(), pheromone_table_size * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_weights, weights.data(), weights.size() * sizeof(int), cudaMemcpyHostToDevice);
+    CHECK_CUDA(cudaMemcpy(d_pheromones, init_pheromones.data(), pheromone_table_size * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_weights, weights.data(), weights.size() * sizeof(int), cudaMemcpyHostToDevice));
+    
+    // Initialize random states (do this once, not every iteration)
+    int threads_per_block = 64;  // Reduced for curand_init
+    int blocks = (params.num_ants + threads_per_block - 1) / threads_per_block;
+    init_curand_kernel<<<blocks, threads_per_block>>>(d_rand_states, params.num_ants, 12345ULL);
+    CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
     
     // Best solution tracking
     std::vector<State> best_solution;
@@ -206,23 +263,31 @@ std::vector<State> PuzzleSolveACO(
     int total_visited = 0;
     
     // ACO main loop
-    int threads_per_block = 256;
-    int blocks = (params.num_ants + threads_per_block - 1) / threads_per_block;
+    threads_per_block = 128;  // Can use more now that curand_init is separate
+    blocks = (params.num_ants + threads_per_block - 1) / threads_per_block;
     
     for (int iter = 0; iter < params.max_iterations; ++iter) {
         // Construct solutions
         aco_construct_solutions_kernel<<<blocks, threads_per_block>>>(
             d_start, d_goal, d_weights, d_pheromones, pheromone_table_size,
-            params, d_ant_paths, d_ant_path_lengths, d_ant_found_goal,
-            (unsigned long long)(iter * 12345)
+            params.num_ants, params.max_steps_per_ant, params.alpha, params.beta,
+            d_ant_paths, d_ant_path_lengths, d_ant_found_goal,
+            d_rand_states
         );
-        cudaDeviceSynchronize();
+        CHECK_CUDA(cudaGetLastError());
+        CHECK_CUDA(cudaDeviceSynchronize());
         
         // Copy results back
         std::vector<int> h_path_lengths(params.num_ants);
         std::vector<int> h_found_goal(params.num_ants);
         cudaMemcpy(h_path_lengths.data(), d_ant_path_lengths, params.num_ants * sizeof(int), cudaMemcpyDeviceToHost);
         cudaMemcpy(h_found_goal.data(), d_ant_found_goal, params.num_ants * sizeof(int), cudaMemcpyDeviceToHost);
+        
+        // Count solutions found this iteration
+        int solutions_found = 0;
+        for (int ant = 0; ant < params.num_ants; ++ant) {
+            if (h_found_goal[ant] == 1) solutions_found++;
+        }
         
         // Find best ant in this iteration
         for (int ant = 0; ant < params.num_ants; ++ant) {
@@ -269,6 +334,7 @@ std::vector<State> PuzzleSolveACO(
     cudaFree(d_ant_paths);
     cudaFree(d_ant_path_lengths);
     cudaFree(d_ant_found_goal);
+    cudaFree(d_rand_states);
     
     if (visited_nodes) *visited_nodes = total_visited;
     
