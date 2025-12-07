@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
         if (a == "--side" && i + 1 < argc) { side_size = stoi(argv[++i]); }
         else if (a == "--empty" && i + 1 < argc) { empty_cells = stoi(argv[++i]); }
         else if (a == "--depth" && i + 1 < argc) { depth = stoi(argv[++i]); }     
-        else if (a == "--seed" && i + 1 < argc) { depth = stoi(argv[++i]); }         
+        else if (a == "--seed" && i + 1 < argc) { seed = stoi(argv[++i]); }         
         else if (a == "--output-file" && i + 1 < argc) { output_file = argv[++i]; }
         else if (a == "--help") {
             cout << "Usage: benchmark-a-star [--side N] [--empty K] [--seed S]\n";
