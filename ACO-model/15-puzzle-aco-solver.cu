@@ -81,48 +81,20 @@ __global__ void aco_construct_solutions_kernel(
     curandState* rand_states       // Pre-initialized random states
 ) {
     int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
-    if (ant_id >= num_ants) return;
-    
-    // Debug: Kernel entry - use a simple printf first
-    if (ant_id == 0) {
-        printf("Ant 0: Entered kernel\n");
-    }
-    
+    if (ant_id >= num_ants) return;    
     // Use pre-initialized random state - add bounds check
     if (ant_id >= num_ants) return;  // Double check
     curandState local_rand_state = rand_states[ant_id];
     
-    if (ant_id == 0) {
-        printf("Ant 0: Got random state\n");
-    }
-    
     DeviceState current = start_state;
     int path_len = 0;
-    
-    // Debug: Before first write
-    if (ant_id == 0) {
-        printf("Ant 0: About to write initial state to d_ant_paths[%d]\n", ant_id * max_steps_per_ant);
-    }
     
     d_ant_paths[ant_id * max_steps_per_ant] = current;
     d_ant_found_goal[ant_id] = 0;
     
-    // Debug: After first write
-    if (ant_id == 0) {
-        printf("Ant 0: Initial state written successfully\n");
-    }
-    
-    // First ant only: print debug info
-    if (ant_id == 0) {
-        printf("Ant 0: Start state num_tiles=%d, Goal state num_tiles=%d\n", 
-               current.num_tiles, goal_state.num_tiles);
-        printf("Ant 0: Start == Goal? %s\n", (current == goal_state) ? "YES" : "NO");
-    }
-    
     for (int step = 0; step < max_steps_per_ant; ++step) {
         // Check if goal reached
         if (current == goal_state) {
-            if (ant_id == 0) printf("Ant 0: Found goal at step %d\n", step);
             d_ant_found_goal[ant_id] = 1;
             d_ant_path_lengths[ant_id] = path_len;
             return;
@@ -131,12 +103,7 @@ __global__ void aco_construct_solutions_kernel(
         // Get available moves - use static array (max 4 moves for 1 empty cell)
         DeviceState moves[4];
         int num_moves = get_available_moves_device(current, moves);
-        
-        // Debug output for first ant first iteration
-        if (ant_id == 0 && step == 0) {
-            printf("Ant 0, Step 0: num_moves=%d, empty_cells=%d\n", num_moves, current.empty_cells);
-        }
-        
+
         // FAIL: Every state MUST have at least one available move
         if (num_moves <= 0 || num_moves > 4) {
             if (ant_id == 0) {
@@ -201,10 +168,6 @@ __global__ void aco_construct_solutions_kernel(
         
         // Write to path array with bounds check
         size_t write_index = ant_id * max_steps_per_ant + path_len;
-        if (ant_id == 0 && step == 0) {
-            printf("Ant 0: Writing to index %zu (ant_id=%d, max_steps=%d, path_len=%d)\n",
-                   write_index, ant_id, max_steps_per_ant, path_len);
-        }
         d_ant_paths[write_index] = current;
     }
     
@@ -253,9 +216,22 @@ std::vector<State> PuzzleSolveACO(
     const ACOParams& params,
     int* visited_nodes
 ) {
+    // Validate inputs
+    if (weights.empty()) {
+        std::cerr << "ERROR: weights vector is empty!" << std::endl;
+        return {};
+    }
+    
     // Convert to device states
     DeviceState d_start = to_device_state(start);
     DeviceState d_goal = to_device_state(goal);
+    
+    // Validate weights size matches number of tiles
+    if (weights.size() < (size_t)d_start.num_tiles) {
+        std::cerr << "ERROR: weights size (" << weights.size() 
+                  << ") is less than num_tiles (" << d_start.num_tiles << ")" << std::endl;
+        return {};
+    }
     
     // Allocate device memory
     int pheromone_table_size = 100000; // Hash table size
@@ -271,10 +247,7 @@ std::vector<State> PuzzleSolveACO(
     CHECK_CUDA(cudaMalloc(&d_ant_paths, params.num_ants * params.max_steps_per_ant * sizeof(DeviceState)));
     CHECK_CUDA(cudaMalloc(&d_ant_path_lengths, params.num_ants * sizeof(int)));
     CHECK_CUDA(cudaMalloc(&d_ant_found_goal, params.num_ants * sizeof(int)));
-    CHECK_CUDA(cudaMalloc(&d_rand_states, params.num_ants * sizeof(curandState)));
-    
-    std::cout << "Allocated device memory successfully" << std::endl;
-    
+    CHECK_CUDA(cudaMalloc(&d_rand_states, params.num_ants * sizeof(curandState)));    
     // Initialize pheromones
     std::vector<float> init_pheromones(pheromone_table_size, params.initial_pheromone);
     CHECK_CUDA(cudaMemcpy(d_pheromones, init_pheromones.data(), pheromone_table_size * sizeof(float), cudaMemcpyHostToDevice));
@@ -286,7 +259,6 @@ std::vector<State> PuzzleSolveACO(
     init_curand_kernel<<<blocks, threads_per_block>>>(d_rand_states, params.num_ants, 12345ULL);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
-    std::cout << "Initialized random states" << std::endl;
     
     // Best solution tracking
     std::vector<State> best_solution;
@@ -306,7 +278,6 @@ std::vector<State> PuzzleSolveACO(
             d_rand_states
         );
         CHECK_CUDA(cudaGetLastError());
-        std::cout << "Iteration " << iter << ": Kernel launched successfully" << std::endl;
         CHECK_CUDA(cudaDeviceSynchronize());
         
         // Copy results back
