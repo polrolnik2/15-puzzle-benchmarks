@@ -80,13 +80,18 @@ __global__ void aco_construct_solutions_kernel(
     int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
     if (ant_id >= params.num_ants) return;
     
-    // Debug: Kernel entry
+    // Debug: Kernel entry - use a simple printf first
     if (ant_id == 0) {
-        printf("Ant 0: Kernel started, num_ants=%d, max_steps=%d\n", params.num_ants, params.max_steps_per_ant);
+        printf("Ant 0: Entered kernel\n");
     }
     
-    // Use pre-initialized random state
+    // Use pre-initialized random state - add bounds check
+    if (ant_id >= params.num_ants) return;  // Double check
     curandState local_rand_state = rand_states[ant_id];
+    
+    if (ant_id == 0) {
+        printf("Ant 0: Got random state\n");
+    }
     
     DeviceState current = start_state;
     int path_len = 0;
