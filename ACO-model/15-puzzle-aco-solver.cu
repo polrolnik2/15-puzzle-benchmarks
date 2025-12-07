@@ -111,11 +111,20 @@ __global__ void aco_construct_solutions_kernel(
         
         // Debug output for first ant first iteration
         if (ant_id == 0 && step == 0) {
-            printf("Ant 0, Step 0: num_moves=%d\n", num_moves);
+            printf("Ant 0, Step 0: num_moves=%d, empty_cells=%d\n", num_moves, current.empty_cells);
         }
         
         // FAIL: Every state MUST have at least one available move
-        assert(num_moves > 0 && num_moves <= current.empty_cells * 4 && "ERROR: Invalid move count!");
+        if (num_moves <= 0 || num_moves > current.empty_cells * 4) {
+            if (ant_id == 0) {
+                printf("ERROR: Invalid move count! num_moves=%d, expected max=%d\n", 
+                       num_moves, current.empty_cells * 4);
+            }
+            free(moves);
+            d_ant_found_goal[ant_id] = -5;
+            d_ant_path_lengths[ant_id] = path_len;
+            return;
+        }
         
         // Calculate probabilities based on pheromones and heuristic
         float* probabilities = (float*)malloc(current.empty_cells * 4 * sizeof(float));
@@ -160,9 +169,24 @@ __global__ void aco_construct_solutions_kernel(
         path_len++;
         
         // FAIL: Path length MUST not exceed buffer
-        assert(path_len < params.max_steps_per_ant && "ERROR: Path length exceeded max steps!");
+        if (path_len >= params.max_steps_per_ant) {
+            if (ant_id == 0) {
+                printf("ERROR: Path length %d exceeded max steps %d\n", path_len, params.max_steps_per_ant);
+            }
+            free(moves);
+            free(probabilities);
+            d_ant_found_goal[ant_id] = -6;
+            d_ant_path_lengths[ant_id] = path_len - 1;
+            return;
+        }
         
-        d_ant_paths[ant_id * params.max_steps_per_ant + path_len] = current;
+        // Write to path array with bounds check
+        size_t write_index = ant_id * params.max_steps_per_ant + path_len;
+        if (ant_id == 0 && step == 0) {
+            printf("Ant 0: Writing to index %zu (ant_id=%d, max_steps=%d, path_len=%d)\n",
+                   write_index, ant_id, params.max_steps_per_ant, path_len);
+        }
+        d_ant_paths[write_index] = current;
         
         // Free allocated memory
         free(moves);
