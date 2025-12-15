@@ -1,8 +1,13 @@
 cmake_minimum_required(VERSION 3.18)
-project(ACO-model LANGUAGES CXX CUDA)
 
-# Set CUDA architectures (adjust based on your GPU)
-set(CMAKE_CUDA_ARCHITECTURES 75 86 89)
+if(USE_CUDA)
+    project(ACO-model LANGUAGES CXX CUDA)
+    
+    # Set CUDA architectures (adjust based on your GPU)
+    set(CMAKE_CUDA_ARCHITECTURES 75 86 89)
+else()
+    message(FATAL_ERROR "ACO-model requires CUDA. Enable with -DUSE_CUDA=ON or exclude this directory.")
+endif()
 
 # ACO solver library
 add_library(acomodel
