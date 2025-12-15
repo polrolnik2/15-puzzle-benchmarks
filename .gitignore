@@ -3,3 +3,4 @@ settings.json
 docs
 .venv
 *.log
+.commands
