@@ -1,5 +1,6 @@
-add_library(astarmodel
+add_library(astarmodel SHARED
     15-puzzle-a-star-solver.cpp
+    15_puzzle_api.cpp
 )
 
 target_include_directories(astarmodel PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/dependencies/a-star/cpp)
@@ -8,6 +9,8 @@ target_include_directories(astarmodel PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE
 target_link_libraries(astarmodel PUBLIC 15-puzzle-state)
 
 target_compile_features(astarmodel PUBLIC cxx_std_20)
+
+set_target_properties(astarmodel PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Model benchmark executable
 add_executable(benchmark_astar
