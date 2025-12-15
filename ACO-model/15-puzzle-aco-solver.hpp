@@ -11,6 +11,14 @@
 
 /**
  * @brief ACO algorithm parameters.
+ * @var num_ants Number of ants per iteration.
+ * @var max_iterations Maximum number of ACO iterations.
+ * @var max_steps_per_ant Maximum steps each ant can take.
+ * @var alpha Pheromone importance factor.
+ * @var beta Heuristic importance factor.
+ * @var evaporation_rate Pheromone evaporation rate (0-1).
+ * @var pheromone_deposit Amount of pheromone deposited by successful ants.
+ * @var initial_pheromone Initial pheromone level on all paths.
  */
 struct ACOParams {
     int num_ants;              // Number of ants per iteration

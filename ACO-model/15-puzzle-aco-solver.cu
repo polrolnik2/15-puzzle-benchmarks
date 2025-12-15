@@ -199,41 +199,35 @@ __global__ void deposit_pheromones_kernel(
     int* d_ant_best_distances,    // NEW: closest distance to goal achieved
     float* d_pheromones,
     int pheromone_size,
-    int num_ants,
-    int max_steps,
-    float deposit_amount,
+    int best_ant_id,            // ID of ant with best solution
+    int best_path_length,       // length of best path
+    int max_steps_per_ant,      // buffer size per ant
+    float deposit_amount
 ) {
-    int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
-    if (ant_id >= num_ants) return;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= best_path_length) return;
     
-    // Reward ants that found the goal (highest priority)
-    if (d_ant_found_goal[ant_id] == 1) {
-        int path_len = d_ant_path_lengths[ant_id];
-        float quality = deposit_amount / (1.0f + path_len);
-        
-        for (int i = 0; i < path_len; ++i) {
-            DeviceState state = d_ant_paths[ant_id * max_steps + i];
-            size_t hash_idx = state.hash() % pheromone_size;
-            atomicAdd(&d_pheromones[hash_idx], quality);
-        }
-    }
-    else if (d_ant_best_distances[ant_id] >= 0) {
-        int path_len = d_ant_path_lengths[ant_id];
-        int best_dist = d_ant_best_distances[ant_id];
-        
-        // Quality inversely proportional to distance from goal
-        // Lower distance = better quality
-        float quality = deposit_amount / (1.0f + best_dist + path_len * 0.5f);
-        
-        for (int i = 0; i < path_len; ++i) {
-            DeviceState state = d_ant_paths[ant_id * max_steps + i];
-            size_t hash_idx = state.hash() % pheromone_size;
-            atomicAdd(&d_pheromones[hash_idx], quality * 0.5f);  // Half weight for partial solutions
-        }
-    }
+    // Only deposit on the best ant's path
+    DeviceState state = d_ant_paths[best_ant_id * max_steps_per_ant + idx];
+    size_t hash_idx = state.hash() % pheromone_size;
+    
+    // Quality inversely proportional to path length (shorter = better)
+    float quality = deposit_amount / (1.0f + best_path_length);
+    
+    // Visit weight: each state in path gets same deposit (uniform weighting)
+    // To add visit frequency, would need histogram of state visits
+    atomicAdd(&d_pheromones[hash_idx], quality);
 }
 
-// Host function
+/* 
+* @brief Host function to solve 15-puzzle using ACO on GPU.
+* @param start The starting state of the puzzle.
+* @param goal The goal state of the puzzle.
+* @param weights Weights for each tile (size should match number of tiles).
+* @param params ACO parameters.
+* @param visited_nodes Pointer to store number of visited nodes (can be nullptr).
+* @return Vector of States representing the best solution path found.
+*/
 std::vector<State> PuzzleSolveACO(
     const State &start, 
     const State &goal, 
@@ -317,8 +311,29 @@ std::vector<State> PuzzleSolveACO(
         
         // Count solutions found this iteration
         int solutions_found = 0;
+        int best_ant = -1;
+        int best_ant_distance = INT_MAX;
+        
         for (int ant = 0; ant < params.num_ants; ++ant) {
-            if (h_found_goal[ant] == 1) solutions_found++;
+            if (h_found_goal[ant] == 1) {
+                solutions_found++;
+                // Best complete solution (shortest path)
+                if (h_path_lengths[ant] < best_length) {
+                    best_length = h_path_lengths[ant];
+                    best_ant = ant;
+                    best_ant_distance = 0;
+                }
+            }
+        }
+        
+        // If no complete solutions, find ant closest to goal
+        if (best_ant == -1) {
+            for (int ant = 0; ant < params.num_ants; ++ant) {
+                if (h_best_distances[ant] < best_ant_distance) {
+                    best_ant_distance = h_best_distances[ant];
+                    best_ant = ant;
+                }
+            }
         }
         
         // Find best ant in this iteration
@@ -348,12 +363,17 @@ std::vector<State> PuzzleSolveACO(
             d_pheromones, pheromone_table_size, params.evaporation_rate, 0.01f
         );
         
-        // Deposit pheromones
-        deposit_pheromones_kernel<<<blocks, threads_per_block>>>(
-            d_ant_paths, d_ant_path_lengths, d_ant_found_goal, d_ant_best_distances,
-            d_pheromones, pheromone_table_size, params.num_ants,
-            params.max_steps_per_ant, params.pheromone_deposit
-        );
+        // Deposit pheromones only on best ant's path (ACS-style)
+        if (best_ant >= 0 && h_path_lengths[best_ant] > 0) {
+            int best_path_len = h_path_lengths[best_ant];
+            int deposit_blocks = (best_path_len + threads_per_block - 1) / threads_per_block;
+            deposit_pheromones_kernel<<<deposit_blocks, threads_per_block>>>(
+                d_ant_paths, d_ant_path_lengths, d_ant_found_goal, d_ant_best_distances,
+                d_pheromones, pheromone_table_size, best_ant, best_path_len,
+                params.max_steps_per_ant, params.pheromone_deposit
+            );
+            CHECK_CUDA(cudaGetLastError());
+        }
         cudaDeviceSynchronize();
         
         // Early termination if good solution found
