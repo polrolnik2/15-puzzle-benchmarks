@@ -61,6 +61,8 @@ def collect_instances(base_dir):
     return instances
 
 
+# @Experiment: Exact Search Benchmarks
+# @Description: Compare BFS and A* search algorithms on generated puzzle instances.
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--datagen-lib', required=True, help='Path to datagen shared library (enables on-the-fly generation)')

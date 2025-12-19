@@ -2,6 +2,7 @@ import argparse
 import csv
 import ctypes
 import os
+import random
 import tempfile
 import matplotlib.pyplot as plt
 
@@ -51,13 +52,14 @@ def run_weighted_astar(lib, instance_path, side, empty, weights, heuristic_weigh
                ctypes.byref(t), ctypes.byref(steps), ctypes.byref(visited))
     return rc, t.value, steps.value, visited.value
 
-
+# @Experiment: Greedy Search Benchmarks
+# @Description: Compare BFS and Weighted A* search algorithms on generated puzzle instances.
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--datagen-lib', required=True, help='Path to datagen shared library (enables on-the-fly generation)')
     ap.add_argument('--depths', type=str, required=True, help='Comma-separated depths to sample (e.g., 5,10,15)')
     ap.add_argument('--samples-per-depth', type=int, default=5, help='Samples per depth to average')
-    ap.add_argument('--seed', type=int, default=12345, help='Base RNG seed')
+    ap.add_argument('--seed', type=int, default=int(random.random() * 1000000), help='Base RNG seed')
     ap.add_argument('--tmp-dir', type=str, default=None, help='Directory to store generated instances (defaults to temp)')
     ap.add_argument('--side', type=int, default=4)
     ap.add_argument('--empty', type=int, default=1)
@@ -86,7 +88,7 @@ def main():
         for k in range(args.samples_per_depth):
             seed = base_seed + idx * 1000 + k
             inst_path = run_datagen_random_walk(datagen_lib, args.side, args.empty, depth, seed, out_dir)
-            rc_b, t_b, steps_b, visited_b = run_bfs(bfs_lib, inst_path, args.side, args.empty)
+            rc_b, t_b, steps_b, visited_b = run_weighted_astar(wastar_lib, inst_path, args.side, args.empty, weights, 1.0)
             if rc_b < 0:
                 continue
             for hw in heuristic_weights:
@@ -121,11 +123,21 @@ def main():
         print(f"Results logged to {args.log_csv}")
 
     # Runtime plot: x-axis optimal solution length, colored by heuristic weight
+    # Average samples per param_depth
     fig_rt, ax_rt = plt.subplots(figsize=(8, 6))
     unique_hw = sorted(set(r['heuristic_weight'] for r in results))
     for hw in unique_hw:
-        xs = [r['bfs_steps'] for r in results if r['heuristic_weight'] == hw]
-        ys = [r['wastar_time_ms'] for r in results if r['heuristic_weight'] == hw]
+        # Group by param_depth and average
+        depth_groups = {}
+        for r in results:
+            if r['heuristic_weight'] == hw:
+                pd = r['param_depth']
+                if pd not in depth_groups:
+                    depth_groups[pd] = {'steps': [], 'times': []}
+                depth_groups[pd]['steps'].append(r['bfs_steps'])
+                depth_groups[pd]['times'].append(r['wastar_time_ms'])
+        xs = [sum(depth_groups[pd]['steps']) / len(depth_groups[pd]['steps']) for pd in sorted(depth_groups.keys())]
+        ys = [sum(depth_groups[pd]['times']) / len(depth_groups[pd]['times']) for pd in sorted(depth_groups.keys())]
         ax_rt.scatter(xs, ys, label=f'w={hw:g}', alpha=0.7, s=50)
     ax_rt.set_xlabel('Optimal Solution Length (BFS steps)')
     ax_rt.set_ylabel('Weighted A* Time (ms)')
@@ -134,17 +146,24 @@ def main():
     ax_rt.grid(True, alpha=0.3)
 
     # Accuracy plot: x-axis = optimal solution length, grouped by heuristic weight (w > 1)
+    # Average samples per param_depth
     fig_acc, ax_acc = plt.subplots(figsize=(8, 6))
     unique_hw_acc = [hw for hw in sorted(set(r['heuristic_weight'] for r in results)) if hw > 1.0]
     for hw in unique_hw_acc:
-        xs = [r['bfs_steps'] for r in results if r['heuristic_weight'] == hw and r['wastar_steps'] > 0 and r['bfs_steps'] > 0]
-        ys = [r['wastar_steps'] / r['bfs_steps'] for r in results
-              if r['heuristic_weight'] == hw and r['wastar_steps'] > 0 and r['bfs_steps'] > 0]
-        if not xs:
+        # Group by param_depth and average
+        depth_groups = {}
+        for r in results:
+            if r['heuristic_weight'] == hw and r['wastar_steps'] > 0 and r['bfs_steps'] > 0:
+                pd = r['param_depth']
+                if pd not in depth_groups:
+                    depth_groups[pd] = {'steps': [], 'accuracy': []}
+                depth_groups[pd]['steps'].append(r['bfs_steps'])
+                depth_groups[pd]['accuracy'].append(r['wastar_steps'] / r['bfs_steps'])
+        if not depth_groups:
             continue
+        xs = [sum(depth_groups[pd]['steps']) / len(depth_groups[pd]['steps']) for pd in sorted(depth_groups.keys())]
+        ys = [sum(depth_groups[pd]['accuracy']) / len(depth_groups[pd]['accuracy']) for pd in sorted(depth_groups.keys())]
         ax_acc.scatter(xs, ys, label=f'w={hw:g}', alpha=0.7, s=50)
-        # Mark mean accuracy for this weight at its average solution length
-        ax_acc.scatter(sum(xs) / len(xs), sum(ys) / len(ys), c='black', marker='x', s=80)
     ax_acc.axhline(1.0, color='gray', linestyle='--', linewidth=1)
     ax_acc.set_xlabel('Optimal Solution Length (BFS steps)')
     ax_acc.set_ylabel('Accuracy (found_steps / optimal_steps)')
