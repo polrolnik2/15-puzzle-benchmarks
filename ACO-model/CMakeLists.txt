@@ -9,9 +9,10 @@ else()
     message(FATAL_ERROR "ACO-model requires CUDA. Enable with -DUSE_CUDA=ON or exclude this directory.")
 endif()
 
-# ACO solver library
-add_library(acomodel
+# ACO solver library 
+add_library(acomodel SHARED
     15-puzzle-aco-solver.cu
+    aco_api.cpp
 )
 
 target_include_directories(acomodel PUBLIC 
@@ -29,6 +30,7 @@ target_compile_features(acomodel PUBLIC cxx_std_20)
 set_target_properties(acomodel PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    POSITION_INDEPENDENT_CODE ON
 )
 
 # ACO benchmark executable
