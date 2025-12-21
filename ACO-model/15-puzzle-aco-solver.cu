@@ -8,6 +8,7 @@
 #include <iostream>
 #include <limits>
 #include <cmath>
+#include <chrono>
 
 /**
  * @file 15-puzzle-aco-solver.cu
@@ -64,7 +65,7 @@ __global__ void init_curand_kernel(curandState* rand_states, int num_ants, unsig
     curand_init(seed, ant_id, 0, &rand_states[ant_id]);
 }
 
-// CUDA kernel: Each ant constructs a path
+// CUDA kernel: Each ant constructs a path (ACS-style pseudo-random proportional rule + local update)
 __global__ void aco_construct_solutions_kernel(
     DeviceState start_state,
     DeviceState goal_state,
@@ -75,16 +76,19 @@ __global__ void aco_construct_solutions_kernel(
     int max_steps_per_ant,
     float alpha,
     float beta,
+    float exploitation_prob,       // ACS q0: greedy pick probability
+    float local_evaporation,       // ACS local decay after each move
+    float initial_pheromone,       // tau0 for local update
     DeviceState* d_ant_paths,      // [num_ants][max_steps_per_ant]
     int* d_ant_path_lengths,       // [num_ants]
     int* d_ant_found_goal,         // [num_ants]
     int* d_ant_best_distances,     // [num_ants] track closest approach to goal
     curandState* rand_states       // Pre-initialized random states
-) {
+)
+{
     int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
     if (ant_id >= num_ants) return;    
-    // Use pre-initialized random state - add bounds check
-    if (ant_id >= num_ants) return;  // Double check
+    // Use pre-initialized random state
     curandState local_rand_state = rand_states[ant_id];
     
     DeviceState current = start_state;
@@ -102,6 +106,7 @@ __global__ void aco_construct_solutions_kernel(
         if (current == goal_state) {
             d_ant_found_goal[ant_id] = 1;
             d_ant_path_lengths[ant_id] = path_len;
+            rand_states[ant_id] = local_rand_state;
             return;
         }
         
@@ -116,50 +121,76 @@ __global__ void aco_construct_solutions_kernel(
             }
             d_ant_found_goal[ant_id] = -5;
             d_ant_path_lengths[ant_id] = path_len;
+            rand_states[ant_id] = local_rand_state;
             return;
         }
         
-        // Calculate probabilities based on pheromones and heuristic
-        float probabilities[4];
+        // Calculate desirability tau^alpha * eta^beta
+        float desirability[4];
         float total_prob = 0.0f;
-        
+        int best_idx = 0;
+        float best_score = -1.0f;
+
         for (int i = 0; i < num_moves; ++i) {
             size_t hash_idx = moves[i].hash() % pheromone_size;
             float pheromone = fmaxf(d_pheromones[hash_idx], 0.01f); 
             float heuristic = 1.0f / (1.0f + manhattan_distance_device(moves[i], goal_state, d_weights));
-            
+    
             // FAIL: Heuristic MUST be in valid range
             assert(heuristic > 0.0f && heuristic <= 1.0f && "ERROR: Invalid heuristic value!");
-            
-            probabilities[i] = powf(pheromone, alpha) * powf(heuristic, beta);
-            
-            // FAIL: Probability must be valid (not NaN or Inf)
-            assert(probabilities[i] >= 0.0f && probabilities[i] < 1e9f && "ERROR: Invalid probability!");
-            
-            total_prob += probabilities[i];
-        }
-        
-        // FAIL: Total probability MUST be valid
-        assert(total_prob > 0.0f && total_prob < 1e9f && "ERROR: Invalid total probability!");
-        
-        // Select next move using roulette wheel selection
-        float rand_val = curand_uniform(&local_rand_state) * total_prob;
-        float cumulative = 0.0f;
-        int selected = 0;
-        
-        for (int i = 0; i < num_moves; ++i) {
-            cumulative += probabilities[i];
-            if (rand_val <= cumulative) {
-                selected = i;
-                break;
+    
+            float score = powf(pheromone, alpha) * powf(heuristic, beta);
+            // FAIL: score must be valid (not NaN or Inf)
+            assert(score >= 0.0f && score < 1e9f && "ERROR: Invalid desirability!");
+            desirability[i] = score;
+            total_prob += score;
+            if (score > best_score) {
+                best_score = score;
+                best_idx = i;
             }
         }
-        
+
+        // FAIL: Total probability MUST be valid
+        assert(total_prob > 0.0f && total_prob < 1e9f && "ERROR: Invalid total probability!");
+
+        // ACS pseudo-random proportional rule
+        int selected = 0;
+        float q = curand_uniform(&local_rand_state);
+        if (q <= exploitation_prob) {
+            selected = best_idx; // greedy choice
+        } else {
+            float rand_val = curand_uniform(&local_rand_state) * total_prob;
+            float cumulative = 0.0f;
+            for (int i = 0; i < num_moves; ++i) {
+                cumulative += desirability[i];
+                if (rand_val <= cumulative) {
+                    selected = i;
+                    break;
+                }
+            }
+        }
+
         // FAIL: Selected move MUST be valid
         assert(selected >= 0 && selected < num_moves && "ERROR: Invalid move selection!");
         
         current = moves[selected];
         path_len++;
+
+        if (path_len >= max_steps_per_ant) {
+            d_ant_found_goal[ant_id] = -6;
+            d_ant_path_lengths[ant_id] = path_len;
+            rand_states[ant_id] = local_rand_state;
+            return;
+        }
+        
+        size_t write_index = ant_id * max_steps_per_ant + path_len;
+        d_ant_paths[write_index] = current;
+
+        // ACS local pheromone update on chosen move (state hash)
+        size_t chosen_hash = current.hash() % pheromone_size;
+        float tau_old = d_pheromones[chosen_hash];
+        float tau_new = (1.0f - local_evaporation) * tau_old + local_evaporation * initial_pheromone;
+        atomicExch(&d_pheromones[chosen_hash], fmaxf(tau_new, 0.0f));
         
         // Update best distance if this state is closer to goal
         int current_distance = manhattan_distance_device(current, goal_state, d_weights);
@@ -167,20 +198,10 @@ __global__ void aco_construct_solutions_kernel(
             best_distance = current_distance;
             d_ant_best_distances[ant_id] = best_distance;
         }
-        
-        // FAIL: Path length MUST not exceed buffer
-        if (path_len >= max_steps_per_ant) {
-            d_ant_found_goal[ant_id] = -6;
-            d_ant_path_lengths[ant_id] = path_len - 1;
-            return;
-        }
-        
-        // Write to path array with bounds check
-        size_t write_index = ant_id * max_steps_per_ant + path_len;
-        d_ant_paths[write_index] = current;
     }
     
     d_ant_path_lengths[ant_id] = path_len;
+    rand_states[ant_id] = local_rand_state;
 }
 
 // CUDA kernel: Evaporate pheromones
@@ -196,7 +217,7 @@ __global__ void deposit_pheromones_kernel(
     DeviceState* d_ant_paths,
     int* d_ant_path_lengths,
     int* d_ant_found_goal,
-    int* d_ant_best_distances,    // NEW: closest distance to goal achieved
+    int* d_ant_best_distances,
     float* d_pheromones,
     int pheromone_size,
     int best_ant_id,            // ID of ant with best solution
@@ -212,7 +233,7 @@ __global__ void deposit_pheromones_kernel(
     size_t hash_idx = state.hash() % pheromone_size;
     
     // Quality inversely proportional to path length (shorter = better)
-    float quality = deposit_amount / (1.0f + best_path_length);
+    float quality = deposit_amount;
     
     // Visit weight: each state in path gets same deposit (uniform weighting)
     // To add visit frequency, would need histogram of state visits
@@ -267,24 +288,30 @@ std::vector<State> PuzzleSolveACO(
     CHECK_CUDA(cudaMalloc(&d_ant_paths, params.num_ants * params.max_steps_per_ant * sizeof(DeviceState)));
     CHECK_CUDA(cudaMalloc(&d_ant_path_lengths, params.num_ants * sizeof(int)));
     CHECK_CUDA(cudaMalloc(&d_ant_found_goal, params.num_ants * sizeof(int)));
-    CHECK_CUDA(cudaMalloc(&d_ant_best_distances, params.num_ants * sizeof(int)));  // NEW
+    CHECK_CUDA(cudaMalloc(&d_ant_best_distances, params.num_ants * sizeof(int)));
     CHECK_CUDA(cudaMalloc(&d_rand_states, params.num_ants * sizeof(curandState)));    
     // Initialize pheromones
     std::vector<float> init_pheromones(pheromone_table_size, params.initial_pheromone);
     CHECK_CUDA(cudaMemcpy(d_pheromones, init_pheromones.data(), pheromone_table_size * sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(d_weights, weights.data(), weights.size() * sizeof(int), cudaMemcpyHostToDevice));
     
-    // Initialize random states (do this once, not every iteration)
+    // Initialize random states with time-based seed for true randomness
     int threads_per_block = 64;  // Reduced for curand_init
     int blocks = (params.num_ants + threads_per_block - 1) / threads_per_block;
-    init_curand_kernel<<<blocks, threads_per_block>>>(d_rand_states, params.num_ants, 12345ULL);
+    unsigned long long seed = std::chrono::steady_clock::now().time_since_epoch().count();
+    init_curand_kernel<<<blocks, threads_per_block>>>(d_rand_states, params.num_ants, seed);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
     
-    // Best solution tracking
+    // Best solution tracking (best so far across iterations)
     std::vector<State> best_solution;
     int best_length = INT_MAX;
     int total_visited = 0;
+    int last_improvement_iter = -1;
+
+    // Stagnation handling constants
+    const int stagnation_patience = 50;           // iterations without improvement before reset
+    const float closest_deposit_scale = 0.1f;     // fraction of pheromone_deposit for closest ant
     
     // ACO main loop
     threads_per_block = 128;  // Can use more now that curand_init is separate
@@ -295,6 +322,7 @@ std::vector<State> PuzzleSolveACO(
         aco_construct_solutions_kernel<<<blocks, threads_per_block>>>(
             d_start, d_goal, d_weights, d_pheromones, pheromone_table_size,
             params.num_ants, params.max_steps_per_ant, params.alpha, params.beta,
+            params.exploitation_prob, params.local_evaporation, params.initial_pheromone,
             d_ant_paths, d_ant_path_lengths, d_ant_found_goal, d_ant_best_distances,
             d_rand_states
         );
@@ -309,50 +337,40 @@ std::vector<State> PuzzleSolveACO(
         cudaMemcpy(h_found_goal.data(), d_ant_found_goal, params.num_ants * sizeof(int), cudaMemcpyDeviceToHost);
         cudaMemcpy(h_best_distances.data(), d_ant_best_distances, params.num_ants * sizeof(int), cudaMemcpyDeviceToHost);
         
-        // Count solutions found this iteration
-        int solutions_found = 0;
+        // Determine iteration-best ant (prefer complete solutions, else closest)
         int best_ant = -1;
         int best_ant_distance = INT_MAX;
+        bool improved = false;
         
+        // Totals and best-so-far update
         for (int ant = 0; ant < params.num_ants; ++ant) {
+            total_visited += h_path_lengths[ant];
+
             if (h_found_goal[ant] == 1) {
-                solutions_found++;
-                // Best complete solution (shortest path)
                 if (h_path_lengths[ant] < best_length) {
                     best_length = h_path_lengths[ant];
                     best_ant = ant;
                     best_ant_distance = 0;
+                    improved = true;
+                    last_improvement_iter = iter;
+
+                    // Copy best path (states) to host as best-so-far
+                    std::vector<DeviceState> h_path(best_length + 1);
+                    cudaMemcpy(h_path.data(),
+                              &d_ant_paths[ant * params.max_steps_per_ant],
+                              (best_length + 1) * sizeof(DeviceState),
+                              cudaMemcpyDeviceToHost);
+
+                    best_solution.clear();
+                    for (int i = 0; i <= best_length; ++i) {
+                        best_solution.push_back(to_host_state(h_path[i]));
+                    }
                 }
-            }
-        }
-        
-        // If no complete solutions, find ant closest to goal
-        if (best_ant == -1) {
-            for (int ant = 0; ant < params.num_ants; ++ant) {
-                if (h_best_distances[ant] < best_ant_distance) {
+            } else {
+                // Track closest-to-goal ant if no solution beats best_length this iter
+                if (best_ant == -1 && h_best_distances[ant] < best_ant_distance) {
                     best_ant_distance = h_best_distances[ant];
                     best_ant = ant;
-                }
-            }
-        }
-        
-        // Find best ant in this iteration
-        for (int ant = 0; ant < params.num_ants; ++ant) {
-            total_visited += h_path_lengths[ant];
-            
-            if (h_found_goal[ant] == 1 && h_path_lengths[ant] < best_length) {
-                best_length = h_path_lengths[ant];
-                
-                // Copy best path
-                std::vector<DeviceState> h_path(best_length + 1);
-                cudaMemcpy(h_path.data(), 
-                          &d_ant_paths[ant * params.max_steps_per_ant],
-                          (best_length + 1) * sizeof(DeviceState),
-                          cudaMemcpyDeviceToHost);
-                
-                best_solution.clear();
-                for (int i = 0; i <= best_length; ++i) {
-                    best_solution.push_back(to_host_state(h_path[i]));
                 }
             }
         }
@@ -363,8 +381,8 @@ std::vector<State> PuzzleSolveACO(
             d_pheromones, pheromone_table_size, params.evaporation_rate, 0.01f
         );
         
-        // Deposit pheromones only on best ant's path (ACS-style)
-        if (best_ant >= 0 && h_path_lengths[best_ant] > 0) {
+        // Deposit pheromones on complete solution (iteration-best)
+        if (best_ant >= 0 && h_found_goal[best_ant] == 1 && h_path_lengths[best_ant] > 0) {
             int best_path_len = h_path_lengths[best_ant];
             int deposit_blocks = (best_path_len + threads_per_block - 1) / threads_per_block;
             deposit_pheromones_kernel<<<deposit_blocks, threads_per_block>>>(
@@ -374,10 +392,25 @@ std::vector<State> PuzzleSolveACO(
             );
             CHECK_CUDA(cudaGetLastError());
         }
+        // If no solution this iter, gently reinforce the closest ant to keep progress signal
+        else if (best_ant >= 0 && h_path_lengths[best_ant] > 0 && best_ant_distance < INT_MAX) {
+            int best_path_len = h_path_lengths[best_ant];
+            int deposit_blocks = (best_path_len + threads_per_block - 1) / threads_per_block;
+            float scaled_deposit = params.pheromone_deposit * closest_deposit_scale;
+            deposit_pheromones_kernel<<<deposit_blocks, threads_per_block>>>(
+                d_ant_paths, d_ant_path_lengths, d_ant_found_goal, d_ant_best_distances,
+                d_pheromones, pheromone_table_size, best_ant, best_path_len,
+                params.max_steps_per_ant, scaled_deposit
+            );
+            CHECK_CUDA(cudaGetLastError());
+        }
         cudaDeviceSynchronize();
-        
-        // Early termination if good solution found
-        if (!best_solution.empty() && best_length < 50) break;
+
+        // Stagnation: if no improvement for many iterations, reset pheromones to tau0
+        if (!improved && iter - last_improvement_iter >= stagnation_patience) {
+            CHECK_CUDA(cudaMemcpy(d_pheromones, init_pheromones.data(), pheromone_table_size * sizeof(float), cudaMemcpyHostToDevice));
+            last_improvement_iter = iter; // avoid immediate re-trigger
+        }
     }
     
     // Cleanup

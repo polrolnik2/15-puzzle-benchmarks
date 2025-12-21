@@ -92,7 +92,6 @@ std::vector<State> PuzzleSolveAstar(const State &start, const State &goal, std::
             p = search_.GetSolutionNext();
         }
         p = search_.GetSolutionEnd();
-        path.push_back(p->to_state());
     }
 
     if (visited_nodes) {

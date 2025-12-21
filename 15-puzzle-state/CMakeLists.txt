@@ -4,6 +4,9 @@ add_library(15-puzzle-state
     distance.cpp
 )
 
+# Build as PIC so it can link into shared libs (e.g., datagen, acomodel)
+set_target_properties(15-puzzle-state PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 target_include_directories(15-puzzle-state PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/dependencies/a-star/cpp)
 
 target_compile_features(15-puzzle-state PUBLIC cxx_std_20)

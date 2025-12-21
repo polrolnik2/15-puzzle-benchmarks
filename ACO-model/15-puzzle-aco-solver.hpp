@@ -16,9 +16,11 @@
  * @var max_steps_per_ant Maximum steps each ant can take.
  * @var alpha Pheromone importance factor.
  * @var beta Heuristic importance factor.
- * @var evaporation_rate Pheromone evaporation rate (0-1).
+ * @var evaporation_rate Global pheromone evaporation rate (0-1).
  * @var pheromone_deposit Amount of pheromone deposited by successful ants.
  * @var initial_pheromone Initial pheromone level on all paths.
+ * @var exploitation_prob ACS q0: probability of greedy selection vs roulette.
+ * @var local_evaporation Local ACS pheromone decay applied after each move.
  */
 struct ACOParams {
     int num_ants;              // Number of ants per iteration
@@ -26,9 +28,11 @@ struct ACOParams {
     int max_steps_per_ant;     // Maximum steps each ant can take
     float alpha;               // Pheromone importance
     float beta;                // Heuristic importance
-    float evaporation_rate;    // Pheromone evaporation (0-1)
+    float evaporation_rate;    // Global pheromone evaporation (0-1)
     float pheromone_deposit;   // Amount deposited by successful ants
     float initial_pheromone;   // Initial pheromone level
+    float exploitation_prob;   // q0: probability of greedy choice
+    float local_evaporation;   // Local pheromone decay after each move
     
     ACOParams() : 
         num_ants(256),
@@ -38,7 +42,9 @@ struct ACOParams {
         beta(2.0f),
         evaporation_rate(0.1f),
         pheromone_deposit(1.0f),
-        initial_pheromone(0.1f) {}
+        initial_pheromone(0.1f),
+        exploitation_prob(0.9f),
+        local_evaporation(0.1f) {}
 };
 
 /**
