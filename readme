@@ -21,6 +21,12 @@ cmake -S .. -B . -DUSE_FSA_MEMORY=OFF -DASTAR_HEURISTIC_WEIGHT=1.0
 cmake --build . -- -j$(sysctl -n hw.ncpu)
 ```
 
+To acquire the sumbodules necessary for building, run the following from the repository root:
+
+```bash
+git submodule update --init --recursive
+```
+
 Notes on CMake options:
 - `USE_FSA_MEMORY` (ON/OFF) toggles the vendor fixed-size allocator (useful for debugging memory issues).
 - `ASTAR_HEURISTIC_WEIGHT` (float) sets the heuristic weight for weighted A* runs.
