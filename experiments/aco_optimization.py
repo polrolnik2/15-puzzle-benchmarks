@@ -96,6 +96,21 @@ def run_aco(lib, instance_path: str, side: int, empty: int, iterations: int, par
     )
     return rc, t_ms.value, steps.value, visited.value, distance.value
 
+
+def prepare_instances(lib, side: int, empty: int, depth: int, num_instances: int, base_seed: int, out_dir: str):
+    instances = []
+    for i in range(num_instances):
+        seed = base_seed + i
+        inst_path = run_datagen_random_walk(lib, side, empty, depth, seed, out_dir)
+        instances.append(inst_path)
+    return instances
+
+
+# Globals filled after argument parsing so Optuna objective can reuse the same instances
+_instances = []
+_weights = [1] * 15
+
+
 def objective(trial):
     # 1. Suggest parameters
     alpha = 1.0
@@ -106,10 +121,7 @@ def objective(trial):
     initial_pheromone = trial.suggest_float("initial_pheromone", 0.01, 1.0)
     deposit = trial.suggest_float("deposit", 1.0, 6.0)
     num_ants = trial.suggest_int("num_ants", 8, 256)
-    max_steps = trial.suggest_int("max_steps", 10, 1000)
-
-    out_dir = tempfile.mkdtemp(prefix="puzzle_aco_datagen_")
-    os.makedirs(out_dir, exist_ok=True)
+    max_steps = trial.suggest_int("max_steps", 10, 100)
 
     params = ACOArgs(
         num_ants=num_ants,
@@ -122,38 +134,48 @@ def objective(trial):
         q0=q0,
         local_evaporation=local_evaporation,
     )
-
-    seed = int(random() * 10000)
     
-    # 2. Run on a representative set of puzzles
+    # 2. Run on the pre-generated shared instances
     scores = []
-    
-    for i in range(200):
-        inst_path = run_datagen_random_walk(datagen_lib, 4, 1, 50, seed, out_dir)
-        # Run your ACS with the suggested params
+    for inst_path in _instances:
         rc, t_ms, steps, visited, distance = run_aco(
             aco_lib,
             inst_path,
             4,
             1,
-            10,
+            100,
             params,
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            _weights,
         )
-        
         # Use a "Distance from Goal" metric if the solution isn't found
         scores.append(distance + steps)
     
     # 3. Return the average (this is what Optuna minimizes)
-    return sum(scores) / 200
+    return sum(scores) / len(_instances)
 
 ap = argparse.ArgumentParser(description="Benchmark CUDA ACO solver against A* baseline.")
 ap.add_argument('--datagen-lib', required=True, help='Path to datagen shared library')
 ap.add_argument('--aco-lib', required=True, help='Path to acomodel shared library')
+ap.add_argument('--num-instances', type=int, default=200, help='Number of shared instances to generate once')
+ap.add_argument('--depth', type=int, default=50, help='Depth for generated instances')
+ap.add_argument('--seed', type=int, default=int(random()*1e6), help='Base RNG seed for instance generation')
 args = ap.parse_args()
 
 datagen_lib = load_lib(args.datagen_lib)
 aco_lib = load_lib(args.aco_lib)
+
+# Pre-generate a fixed set of instances once so all trials see the same data
+out_dir = tempfile.mkdtemp(prefix="puzzle_aco_datagen_shared_")
+os.makedirs(out_dir, exist_ok=True)
+_instances = prepare_instances(
+    datagen_lib,
+    side=4,
+    empty=1,
+    depth=args.depth,
+    num_instances=args.num_instances,
+    base_seed=int(args.seed),
+    out_dir=out_dir,
+)
 
 study = optuna.create_study(direction="minimize")
 study.optimize(objective, n_trials=50)
