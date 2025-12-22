@@ -94,10 +94,18 @@ __global__ void aco_construct_solutions_kernel(
     DeviceState current = start_state;
     int path_len = 0;
     
-    // Tabu list: track visited state hashes to prevent cycles
-    // Using a simple hash set with max_steps_per_ant capacity
-    size_t tabu_list[1000];  // Reasonable max for 15-puzzle
-    int tabu_size = 0;
+    // Tabu hash set: use simple open addressing with linear probing
+    // Size must be power of 2 for fast modulo with bitwise AND
+    const int TABU_SIZE = 1024;  // Must be > max_steps_per_ant
+    const int TABU_MASK = TABU_SIZE - 1;
+    size_t tabu_set[1024];
+    bool tabu_occupied[1024];
+    
+    // Initialize tabu set as empty
+    #pragma unroll 16
+    for (int i = 0; i < TABU_SIZE; ++i) {
+        tabu_occupied[i] = false;
+    }
     
     // Track the best (minimum) distance to goal this ant achieves
     int best_distance = manhattan_distance_device(start_state, goal_state, d_weights);
@@ -106,9 +114,15 @@ __global__ void aco_construct_solutions_kernel(
     d_ant_paths[ant_id * max_steps_per_ant] = current;
     d_ant_found_goal[ant_id] = 0;
     
-    // Add start state to tabu list
-    if (tabu_size < 1000) {
-        tabu_list[tabu_size++] = current.hash();
+    // Add start state to tabu set using open addressing
+    {
+        size_t hash = current.hash();
+        int idx = hash & TABU_MASK;
+        while (tabu_occupied[idx]) {
+            idx = (idx + 1) & TABU_MASK;  // Linear probing
+        }
+        tabu_set[idx] = hash;
+        tabu_occupied[idx] = true;
     }
     
     for (int step = 0; step < max_steps_per_ant; ++step) {
@@ -135,18 +149,25 @@ __global__ void aco_construct_solutions_kernel(
             return;
         }
         
-        // Filter out moves that lead to states in tabu list (already visited)
+        // Filter out moves that lead to states in tabu set (already visited)
         DeviceState valid_moves[4];
         int valid_count = 0;
         for (int i = 0; i < num_moves; ++i) {
             size_t move_hash = moves[i].hash();
+            
+            // Hash table lookup with linear probing
             bool in_tabu = false;
-            for (int t = 0; t < tabu_size; ++t) {
-                if (tabu_list[t] == move_hash) {
+            int idx = move_hash & TABU_MASK;
+            int probes = 0;
+            while (tabu_occupied[idx] && probes < TABU_SIZE) {
+                if (tabu_set[idx] == move_hash) {
                     in_tabu = true;
                     break;
                 }
+                idx = (idx + 1) & TABU_MASK;
+                probes++;
             }
+            
             if (!in_tabu) {
                 valid_moves[valid_count++] = moves[i];
             }
@@ -200,9 +221,20 @@ __global__ void aco_construct_solutions_kernel(
         current = valid_moves[selected];
         path_len++;
         
-        // Add new state to tabu list
-        if (tabu_size < 500) {
-            tabu_list[tabu_size++] = current.hash();
+        // Add new state to tabu set using open addressing
+        {
+            size_t hash = current.hash();
+            int idx = hash & TABU_MASK;
+            int probes = 0;
+            while (tabu_occupied[idx] && probes < TABU_SIZE) {
+                if (tabu_set[idx] == hash) break;  // Already in set
+                idx = (idx + 1) & TABU_MASK;
+                probes++;
+            }
+            if (probes < TABU_SIZE && !tabu_occupied[idx]) {
+                tabu_set[idx] = hash;
+                tabu_occupied[idx] = true;
+            }
         }
         
         if (path_len >= max_steps_per_ant) {
