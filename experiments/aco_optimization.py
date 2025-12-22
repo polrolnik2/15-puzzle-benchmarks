@@ -147,7 +147,8 @@ def objective(trial):
             params,
             _weights,
         )
-        # Use a "Distance from Goal" metric if the solution isn't found
+        if rc == 0:
+            steps = 100
         scores.append(distance + steps)
     
     # 3. Return the average (this is what Optuna minimizes)

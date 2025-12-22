@@ -454,7 +454,8 @@ std::vector<State> PuzzleSolveACO(
     cudaFree(d_rand_states);
     
     if (visited_nodes) *visited_nodes = total_visited;
-    if (out_distance) *out_distance = overall_best_ant_distance;    
+    if (out_distance && best_solution.size() == 0) *out_distance = overall_best_ant_distance;    
+    else if (out_distance && best_solution.size() > 0) *out_distance = 0;    
     
     return best_solution;
 }
