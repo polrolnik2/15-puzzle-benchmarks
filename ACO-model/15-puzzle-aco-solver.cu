@@ -65,7 +65,7 @@ __global__ void init_curand_kernel(curandState* rand_states, int num_ants, unsig
     curand_init(seed, ant_id, 0, &rand_states[ant_id]);
 }
 
-// CUDA kernel: Each ant constructs a path (ACS-style pseudo-random proportional rule + local update)
+// CUDA kernel: Each ant constructs a path
 __global__ void aco_construct_solutions_kernel(
     DeviceState start_state,
     DeviceState goal_state,
@@ -84,15 +84,20 @@ __global__ void aco_construct_solutions_kernel(
     int* d_ant_found_goal,         // [num_ants]
     int* d_ant_best_distances,     // [num_ants] track closest approach to goal
     curandState* rand_states       // Pre-initialized random states
-)
-{
+) {
     int ant_id = blockIdx.x * blockDim.x + threadIdx.x;
     if (ant_id >= num_ants) return;    
-    // Use pre-initialized random state
+    // Use pre-initialized random state - add bounds check
+    if (ant_id >= num_ants) return;  // Double check
     curandState local_rand_state = rand_states[ant_id];
     
     DeviceState current = start_state;
     int path_len = 0;
+    
+    // Tabu list: track visited state hashes to prevent cycles
+    // Using a simple hash set with max_steps_per_ant capacity
+    size_t tabu_list[1000];  // Reasonable max for 15-puzzle
+    int tabu_size = 0;
     
     // Track the best (minimum) distance to goal this ant achieves
     int best_distance = manhattan_distance_device(start_state, goal_state, d_weights);
@@ -100,6 +105,11 @@ __global__ void aco_construct_solutions_kernel(
     
     d_ant_paths[ant_id * max_steps_per_ant] = current;
     d_ant_found_goal[ant_id] = 0;
+    
+    // Add start state to tabu list
+    if (tabu_size < 1000) {
+        tabu_list[tabu_size++] = current.hash();
+    }
     
     for (int step = 0; step < max_steps_per_ant; ++step) {
         // Check if goal reached
@@ -125,16 +135,41 @@ __global__ void aco_construct_solutions_kernel(
             return;
         }
         
-        // Calculate desirability tau^alpha * eta^beta
+        // Filter out moves that lead to states in tabu list (already visited)
+        DeviceState valid_moves[4];
+        int valid_count = 0;
+        for (int i = 0; i < num_moves; ++i) {
+            size_t move_hash = moves[i].hash();
+            bool in_tabu = false;
+            for (int t = 0; t < tabu_size; ++t) {
+                if (tabu_list[t] == move_hash) {
+                    in_tabu = true;
+                    break;
+                }
+            }
+            if (!in_tabu) {
+                valid_moves[valid_count++] = moves[i];
+            }
+        }
+        
+        // If all moves are tabu, we're stuck in a dead end
+        if (valid_count == 0) {
+            d_ant_found_goal[ant_id] = -7;  // Dead end code
+            d_ant_path_lengths[ant_id] = path_len;
+            rand_states[ant_id] = local_rand_state;
+            return;
+        }
+        
+        // Calculate desirability tau^alpha * eta^beta for valid moves only
         float desirability[4];
         float total_prob = 0.0f;
         int best_idx = 0;
         float best_score = -1.0f;
 
-        for (int i = 0; i < num_moves; ++i) {
-            size_t hash_idx = moves[i].hash() % pheromone_size;
+        for (int i = 0; i < valid_count; ++i) {
+            size_t hash_idx = valid_moves[i].hash() % pheromone_size;
             float pheromone = fmaxf(d_pheromones[hash_idx], 0.01f); 
-            float heuristic = 1.0f / (1.0f + manhattan_distance_device(moves[i], goal_state, d_weights));
+            float heuristic = 1.0f / (1.0f + manhattan_distance_device(valid_moves[i], goal_state, d_weights));
             assert(heuristic > 0.0f && heuristic <= 1.0f && "ERROR: Invalid heuristic value!");
             float score = powf(pheromone, alpha) * powf(heuristic, beta);
             assert(score >= 0.0f && score < 1e9f && "ERROR: Invalid desirability!");
@@ -153,18 +188,23 @@ __global__ void aco_construct_solutions_kernel(
         } else {
             float rand_val = curand_uniform(&local_rand_state) * total_prob;
             float cumulative = 0.0f;
-            for (int i = 0; i < num_moves; ++i) {
+            for (int i = 0; i < valid_count; ++i) {
                 cumulative += desirability[i];
                 if (rand_val <= cumulative) {
                     selected = i;
                     break;
                 }
-                selected = best_idx;
             }
         }
-        assert(selected >= 0 && selected < num_moves && "ERROR: Invalid move selection!");
-        current = moves[selected];
+        assert(selected >= 0 && selected < valid_count && "ERROR: Invalid move selection!");
+        current = valid_moves[selected];
         path_len++;
+        
+        // Add new state to tabu list
+        if (tabu_size < 500) {
+            tabu_list[tabu_size++] = current.hash();
+        }
+        
         if (path_len >= max_steps_per_ant) {
             d_ant_found_goal[ant_id] = -6;
             d_ant_path_lengths[ant_id] = path_len;
@@ -234,7 +274,8 @@ std::vector<State> PuzzleSolveACO(
     const State &goal, 
     std::vector<int> weights,
     const ACOParams& params,
-    int* visited_nodes
+    int* visited_nodes,
+    int* out_distance
 ) {
     // Validate inputs
     if (weights.empty()) {
@@ -287,6 +328,8 @@ std::vector<State> PuzzleSolveACO(
     
     threads_per_block = 128;  
     blocks = (params.num_ants + threads_per_block - 1) / threads_per_block;
+
+    int overall_best_ant_distance = INT_MAX;
     
     for (int iter = 0; iter < params.max_iterations; ++iter) {
         aco_construct_solutions_kernel<<<blocks, threads_per_block>>>(
@@ -335,6 +378,7 @@ std::vector<State> PuzzleSolveACO(
                     best_ant = ant;
                 }
             }
+            overall_best_ant_distance = best_ant_distance;
         }
         
         // Evaporate pheromones
@@ -378,6 +422,7 @@ std::vector<State> PuzzleSolveACO(
     cudaFree(d_rand_states);
     
     if (visited_nodes) *visited_nodes = total_visited;
+    if (out_distance) *out_distance = overall_best_ant_distance;    
     
     return best_solution;
 }

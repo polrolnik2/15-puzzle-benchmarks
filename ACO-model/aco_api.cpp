@@ -31,7 +31,8 @@ extern "C" {
         int weights_len,
         double* out_time_ms,
         int* out_steps,
-        int* out_visited
+        int* out_visited,
+        int * out_distance
     ) {
         if (!input_file || !out_time_ms || !out_steps || !out_visited) {
             return -1;
@@ -69,10 +70,12 @@ extern "C" {
 
         auto t0 = std::chrono::steady_clock::now();
         int visited_nodes = 0;
-        std::vector<State> path = PuzzleSolveACO(start_state, goal_state, weights_vec, params, &visited_nodes);
+        int distance = 0;
+        std::vector<State> path = PuzzleSolveACO(start_state, goal_state, weights_vec, params, &visited_nodes, &distance);
         auto t1 = std::chrono::steady_clock::now();
         double ms = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(t1 - t0).count();
 
+        *out_distance = distance;
         *out_time_ms = ms;
         *out_steps = static_cast<int>(path.size()); // consistent with A* and BFS: return number of states in path
         *out_visited = visited_nodes;

@@ -62,7 +62,8 @@ std::vector<State> PuzzleSolveACO(
     const State &goal, 
     std::vector<int> weights,
     const ACOParams& params = ACOParams(),
-    int* visited_nodes = nullptr
+    int* visited_nodes = nullptr,
+    int * out_distance = nullptr
 );
 
 #endif // PUZZLE_ACO_SOLVER_HPP
