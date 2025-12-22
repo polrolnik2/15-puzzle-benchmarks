@@ -114,13 +114,13 @@ _weights = [1] * 15
 def objective(trial):
     # 1. Suggest parameters
     alpha = 1.0
-    beta = trial.suggest_float("beta", 0.5, 20.0)
-    q0 = trial.suggest_float("q0", 0.7, 0.99)
+    beta = trial.suggest_float("beta", 0.5, 24.0)
+    q0 = trial.suggest_float("q0", 0.1, 0.99)
     evaporation = trial.suggest_float("evaporation", 0.01, 0.5)
     local_evaporation = trial.suggest_float("local_evaporation", 0.01, 0.5)
     initial_pheromone = trial.suggest_float("initial_pheromone", 0.01, 1.0)
-    deposit = trial.suggest_float("deposit", 1.0, 6.0)
-    num_ants = trial.suggest_int("num_ants", 8, 256)
+    deposit = trial.suggest_float("deposit", 1.0, 10.0)
+    num_ants = trial.suggest_int("num_ants", 8, 4096)
     max_steps = trial.suggest_int("max_steps", 10, 100)
 
     params = ACOArgs(
@@ -179,4 +179,4 @@ _instances = prepare_instances(
 )
 
 study = optuna.create_study(direction="minimize")
-study.optimize(objective, n_trials=50)
+study.optimize(objective, n_trials=200)

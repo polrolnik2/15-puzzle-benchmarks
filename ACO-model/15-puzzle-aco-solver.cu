@@ -201,7 +201,7 @@ __global__ void aco_construct_solutions_kernel(
                 best_idx = i;
             }
         }
-        assert(total_prob > 0.0f && total_prob < 1e9f && "ERROR: Invalid total probability!");
+        assert(total_prob > 0.0f && total_prob < 1e12f && "ERROR: Invalid total probability!");
         int selected = 0;
         float q = curand_uniform(&local_rand_state);
         if (q <= exploitation_prob) {

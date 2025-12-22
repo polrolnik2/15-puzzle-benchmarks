@@ -245,9 +245,9 @@ def main():
     iter_vals = [r['iterations'] for r in successes]
     quality_vals = [r['quality_ratio'] for r in successes]
     time_vals = [r['aco_time_ms'] for r in successes]
-    depth_vals = [r['param_depth'] for r in successes]
+    depth_vals = [r['astar_steps'] for r in successes]
 
-    fig, (ax_quality, ax_time) = plt.subplots(1, 2, figsize=(12, 5))
+    fig, (ax_quality) = plt.subplots(1, 1, figsize=(12, 5))
 
     scatter = ax_quality.scatter(iter_vals, quality_vals, c=depth_vals, cmap='viridis', alpha=0.75, s=60)
     ax_quality.set_xlabel('ACO Iterations')
@@ -257,15 +257,7 @@ def main():
     ax_quality.grid(True, alpha=0.3)
     ax_quality.legend()
 
-    ax_time.scatter(iter_vals, time_vals, c=depth_vals, cmap='viridis', alpha=0.75, s=60)
-    ax_time.set_xlabel('ACO Iterations')
-    ax_time.set_ylabel('Time (ms)')
-    ax_time.set_title('Runtime vs Iterations')
-    ax_time.grid(True, alpha=0.3)
-
-    cbar = fig.colorbar(scatter, ax=[ax_quality, ax_time], label='Generation Depth')
-
-    fig.tight_layout()
+    cbar = fig.colorbar(scatter, ax=[ax_quality], label='Generation Depth')
 
     if args.plot_file:
         fig.savefig(args.plot_file, dpi=150)

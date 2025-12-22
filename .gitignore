@@ -4,3 +4,6 @@ docs
 .venv
 *.log
 .commands
+*.csv
+*.png
+*.txt
