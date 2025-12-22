@@ -56,6 +56,7 @@ def run_aco(lib, instance_path: str, side: int, empty: int, iterations: int, par
     t_ms = ctypes.c_double(0.0)
     steps = ctypes.c_int(0)
     visited = ctypes.c_int(0)
+    distance = ctypes.c_int(0)
 
     rc = aco_fn(
         instance_path.encode('utf-8'),
@@ -76,8 +77,9 @@ def run_aco(lib, instance_path: str, side: int, empty: int, iterations: int, par
         ctypes.byref(t_ms),
         ctypes.byref(steps),
         ctypes.byref(visited),
+        ctypes.byref(distance)
     )
-    return rc, t_ms.value, steps.value, visited.value
+    return rc, t_ms.value, steps.value, visited.value, distance.value
 
 
 def run_astar(lib, instance_path: str, side: int, empty: int, weights):
@@ -200,7 +202,7 @@ def main():
             print(f"  A* baseline: {steps_astar} steps in {t_astar:.2f} ms" if rc_astar > 0 else "  A* baseline: FAILED")
 
             for iters in iteration_list:
-                rc, t_ms, steps, visited = run_aco(
+                rc, t_ms, steps, visited, distance = run_aco(
                     aco_lib,
                     inst_path,
                     args.side,
@@ -224,7 +226,7 @@ def main():
                 })
                 status = "OK" if rc > 0 else "NO-SOLUTION"
                 qual_str = f" ({quality_ratio:.2f}x A*)" if quality_ratio else ""
-                print(f"  iter={iters:4d} sample={sample+1}/{args.samples_per_depth}: {status}, steps={steps}{qual_str}, time={t_ms:.2f} ms")
+                print(f"  iter={iters:4d} sample={sample+1}/{args.samples_per_depth}: {status}, steps={steps}{qual_str}, distance={distance}, time={t_ms:.2f} ms")
 
     if args.log_csv:
         with open(args.log_csv, 'w', newline='') as f:
