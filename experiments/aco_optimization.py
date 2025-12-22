@@ -7,6 +7,9 @@ import csv
 import matplotlib.pyplot as plt
 import argparse
 
+# @Experiment: aco_optimization.py
+# @Description: An experiment aiming to find the parameters at which the Ant Colony Optimization algorithm performs best on the 15-puzzle problem.
+
 class ACOArgs:
     def __init__(self, num_ants: int, max_steps: int, alpha: float, beta: float,
                  evaporation: float, deposit: float, initial_pheromone: float,
