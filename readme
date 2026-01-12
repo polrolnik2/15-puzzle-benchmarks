@@ -30,6 +30,7 @@ git submodule update --init --recursive
 Notes on CMake options:
 - `USE_FSA_MEMORY` (ON/OFF) toggles the vendor fixed-size allocator (useful for debugging memory issues).
 - `ASTAR_HEURISTIC_WEIGHT` (float) sets the heuristic weight for weighted A* runs.
+- `USE_CUDA` (ON/OFF) enables CUDA support if you have a compatible NVIDIA GPU and CUDA toolkit installed.
 
 Common CMake targets
 - `all` (default): builds libraries and executables
@@ -37,6 +38,7 @@ Common CMake targets
 - `benchmark_astar`: A* benchmark executable
 - `benchmark_bfs`: BFS benchmark executable
 - `benchmark_weightedastar`: Weighted A* benchmark executable
+- `benchmark_aco`: Ant Colony Optimization benchmark executable
 - `generate_sample_bfs`: data-generation (BFS sampling)
 - `generate_sample_random_walk`: data-generation (random-walk sampling)
 - `doc` (if Doxygen is available): build API documentation (HTML) using the repository `Doxyfile`
